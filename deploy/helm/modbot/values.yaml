@@ -1,0 +1,54 @@
+image:
+  repository: ghcr.io/arifje/geenstijl-modbot
+  tag: ""          # defaults to .Chart.AppVersion
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# Non-secret configuration, rendered into a ConfigMap.
+config:
+  APP_ENV: production
+  APP_DEBUG: "false"
+  LOG_CHANNEL: stderr
+  LOG_LEVEL: info
+  CACHE_STORE: database
+  QUEUE_CONNECTION: sync
+  SESSION_DRIVER: array
+  DB_CONNECTION: pgsql
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_DATABASE: modbot
+  MODBOT_LLM_MODEL: claude-opus-5-5
+  MODBOT_LLM_EFFORT: medium
+  MODBOT_WINDOW_HOURS: "12"
+  MODBOT_ARTICLE_LOOKBACK_HOURS: "24"
+  MODBOT_ONLY_APPROVED: "true"
+  MODBOT_REPORT_CRON: "0 8,20 * * *"
+  SLACK_CHANNEL: "#development"
+  SLACK_USERNAME: ModBot
+  AHASEND_FROM_EMAIL: no-reply@platform.geenstijl.nl
+  AHASEND_FROM_NAME: GeenStijl Moderatierapport
+  AHASEND_RECIPIENTS: ""
+
+# Secrets: either reference an existing Secret (recommended, e.g. created by
+# sealed-secrets or external-secrets) or let the chart create one.
+# Expected keys: APP_KEY, DB_USERNAME, DB_PASSWORD, ANTHROPIC_API_KEY,
+# SLACK_BOT_TOKEN, AHASEND_API_KEY, AHASEND_ACCOUNT_ID
+existingSecret: ""
+secret: {}
+
+# Run database migrations in an init container before the scheduler starts.
+migrations:
+  enabled: true
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 384Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+podAnnotations: {}

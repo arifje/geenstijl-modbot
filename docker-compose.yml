@@ -1,0 +1,31 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: modbot
+      POSTGRES_USER: modbot
+      POSTGRES_PASSWORD: modbot
+    ports:
+      - "54329:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U modbot"]
+      interval: 5s
+      retries: 10
+
+  # Runs the scheduler, like the Kubernetes deployment does.
+  # Start with: docker compose --profile app up --build
+  app:
+    build: .
+    profiles: ["app"]
+    env_file: .env
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db-data:

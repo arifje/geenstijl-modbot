@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "modbot.fullname" . }}
+  labels:
+    {{- include "modbot.labels" . | nindent 4 }}
+spec:
+  # The scheduler must run exactly once.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "modbot.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "modbot.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 82   # www-data in the alpine image
+        runAsGroup: 82
+      {{- if .Values.migrations.enabled }}
+      initContainers:
+        - name: migrate
+          image: {{ include "modbot.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["php", "artisan", "migrate", "--force"]
+          envFrom:
+            {{- include "modbot.envFrom" . | nindent 12 }}
+          securityContext:
+            {{- include "modbot.securityContext" . | nindent 12 }}
+      {{- end }}
+      containers:
+        - name: scheduler
+          image: {{ include "modbot.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["php", "artisan", "schedule:work"]
+          envFrom:
+            {{- include "modbot.envFrom" . | nindent 12 }}
+          securityContext:
+            {{- include "modbot.securityContext" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

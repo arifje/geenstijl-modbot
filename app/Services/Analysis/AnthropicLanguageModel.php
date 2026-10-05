@@ -1,0 +1,73 @@
+<?php
+
+namespace App\Services\Analysis;
+
+use Anthropic\Client;
+use Anthropic\Core\Exceptions\AnthropicException;
+
+class AnthropicLanguageModel implements LanguageModel
+{
+    public function __construct(
+        private Client $client,
+        private string $model,
+        private string $effort,
+        private int $maxTokens,
+    ) {}
+
+    public function complete(string $system, string $input, ?array $schema = null): LlmResult
+    {
+        $outputConfig = ['effort' => $this->effort];
+
+        if ($schema !== null) {
+            $outputConfig['format'] = ['type' => 'json_schema', 'schema' => $schema];
+        }
+
+        try {
+            $message = $this->client->beta->messages->create(
+                model: $this->model,
+                maxTokens: $this->maxTokens,
+                system: [
+                    ['type' => 'text', 'text' => $system, 'cacheControl' => ['type' => 'ephemeral']],
+                ],
+                messages: [
+                    ['role' => 'user', 'content' => $input],
+                ],
+                outputConfig: $outputConfig,
+                // Retry on another model if a safety classifier declines the request.
+                fallbacks: 'default',
+                betas: ['server-side-fallback-2026-07-01'],
+            );
+        } catch (AnthropicException $e) {
+            throw new LlmException('Anthropic API error: '.$e->getMessage(), previous: $e);
+        }
+
+        if ($message->stopReason === 'refusal') {
+            throw new LlmException('Model refused the request: '.($message->stopDetails?->category ?? 'unknown'));
+        }
+
+        if ($message->stopReason === 'max_tokens') {
+            throw new LlmException('Model output hit max_tokens');
+        }
+
+        $text = '';
+        foreach ($message->content as $block) {
+            if ($block->type === 'text') {
+                $text .= $block->text;
+            }
+        }
+
+        return new LlmResult(
+            text: trim($text),
+            model: $message->model,
+            inputTokens: $message->usage->inputTokens
+                + ($message->usage->cacheReadInputTokens ?? 0)
+                + ($message->usage->cacheCreationInputTokens ?? 0),
+            outputTokens: $message->usage->outputTokens,
+        );
+    }
+
+    public function name(): string
+    {
+        return $this->model;
+    }
+}
