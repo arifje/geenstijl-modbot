@@ -14,15 +14,29 @@ services:
       interval: 5s
       retries: 10
 
-  # Runs the scheduler, like the Kubernetes deployment does.
+  # Same two roles as in Kubernetes.
   # Start with: docker compose --profile app up --build
-  app:
+  scheduler:
     build: .
     profiles: ["app"]
     env_file: .env
     environment:
       DB_HOST: db
       DB_PORT: 5432
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build: .
+    profiles: ["app"]
+    command: ["frankenphp", "php-server", "--root", "public/", "--listen", ":8080"]
+    env_file: .env
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+    ports:
+      - "8080:8080"
     depends_on:
       db:
         condition: service_healthy

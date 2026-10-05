@@ -6,6 +6,7 @@ use Anthropic\Client;
 use App\Services\Analysis\AnthropicLanguageModel;
 use App\Services\Analysis\LanguageModel;
 use App\Services\Analysis\PromptRepository;
+use App\Support\Settings;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -28,6 +29,6 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        //
+        Settings::apply();
     }
 }

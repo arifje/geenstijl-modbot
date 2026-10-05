@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Comment;
 use App\Models\CommentVerdict;
 use App\Models\ModerationRun;
+use App\Models\Schedule;
 use App\Services\Analysis\LanguageModel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -160,6 +161,25 @@ class RunModerationTest extends TestCase
 
         // Only a failure notice goes to Slack, no email.
         Http::assertSent(fn (Request $r) => str_contains($r->url(), 'slack.com') && str_contains($r['text'], 'ModBot-run mislukt'));
+        Http::assertNotSent(fn (Request $r) => str_contains($r->url(), 'ahasend'));
+    }
+
+    public function test_a_schedule_run_uses_the_schedule_settings(): void
+    {
+        $schedule = Schedule::create([
+            'name' => 'Test', 'cron' => '0 * * * *', 'window_hours' => 3,
+            'send_slack' => true, 'send_email' => false, 'slack_channel' => '#moderatie',
+        ]);
+
+        $this->artisan("modbot:run --schedule={$schedule->id}")->assertSuccessful();
+
+        $run = ModerationRun::latest('id')->first();
+        $this->assertSame('schedule', $run->trigger);
+        $this->assertSame($schedule->id, $run->schedule_id);
+        $this->assertSame(3, (int) round($run->window_start->diffInHours($run->window_end)));
+        $this->assertNotNull($schedule->fresh()->last_run_at);
+
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'slack.com') && $r['channel'] === '#moderatie');
         Http::assertNotSent(fn (Request $r) => str_contains($r->url(), 'ahasend'));
     }
 

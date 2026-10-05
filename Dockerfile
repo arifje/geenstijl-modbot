@@ -7,12 +7,17 @@ RUN composer install --no-dev --no-scripts --no-autoloader --no-interaction --pr
 COPY . .
 RUN composer dump-autoload --optimize --classmap-authoritative --no-dev
 
-FROM php:8.5-cli-alpine
+# One image, two roles:
+#   web:       frankenphp php-server (admin panel on :8080)
+#   scheduler: php artisan schedule:work (default)
+FROM dunglas/frankenphp:php8.5-alpine
 
-COPY --from=ghcr.io/mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
-RUN install-php-extensions pdo_pgsql intl pcntl opcache \
+RUN install-php-extensions pdo_pgsql intl pcntl opcache zip \
     && mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" \
-    && echo "opcache.enable_cli=1" > "$PHP_INI_DIR/conf.d/opcache-cli.ini"
+    && echo "opcache.enable_cli=1" > "$PHP_INI_DIR/conf.d/opcache-cli.ini" \
+    # Run as non-root: no privileged ports needed, Caddy data dirs writable.
+    && setcap -r /usr/local/bin/frankenphp \
+    && chown -R www-data:www-data /data /config
 
 WORKDIR /app
 COPY --from=vendor --chown=www-data:www-data /app /app
@@ -20,9 +25,13 @@ COPY --from=vendor --chown=www-data:www-data /app /app
 ENV APP_ENV=production \
     APP_DEBUG=false \
     LOG_CHANNEL=stderr \
-    LOG_LEVEL=info
+    LOG_LEVEL=info \
+    SERVER_NAME=:8080
 
 USER www-data
-RUN php artisan package:discover --ansi
+RUN php artisan package:discover --ansi \
+    && php artisan filament:assets --ansi
+
+EXPOSE 8080
 
 CMD ["php", "artisan", "schedule:work"]

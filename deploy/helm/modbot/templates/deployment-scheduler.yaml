@@ -1,9 +1,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "modbot.fullname" . }}
+  name: {{ include "modbot.fullname" . }}-scheduler
   labels:
     {{- include "modbot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: scheduler
 spec:
   # The scheduler must run exactly once.
   replicas: 1
@@ -12,10 +13,12 @@ spec:
   selector:
     matchLabels:
       {{- include "modbot.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: scheduler
   template:
     metadata:
       labels:
         {{- include "modbot.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: scheduler
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
         {{- with .Values.podAnnotations }}

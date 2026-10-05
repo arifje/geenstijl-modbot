@@ -30,12 +30,18 @@ class ModerationPipeline
     /**
      * @param  callable(string): void|null  $progress
      */
-    public function run(int $windowHours, bool $reanalyze = false, ?callable $progress = null): ModerationRun
+    public function run(RunOptions $options, ?callable $progress = null): ModerationRun
     {
         $progress ??= fn (string $message) => null;
         $now = now();
+        $windowHours = $options->windowHours;
+        $reanalyze = $options->reanalyze;
 
         $run = ModerationRun::create([
+            'trigger' => $options->trigger,
+            'schedule_id' => $options->scheduleId,
+            'user_id' => $options->userId,
+            'dry_run' => $options->dryRun,
             'started_at' => $now,
             'window_start' => $now->copy()->subHours($windowHours),
             'window_end' => $now,
@@ -63,7 +69,11 @@ class ModerationPipeline
                 throw new RuntimeException("Analysis failed for all {$stats['failed']} comments, see the log.");
             }
 
+            $inWindow = Comment::moderatable($run->window_start, $run->window_end);
+
             $run->fill([
+                'articles_count' => (clone $inWindow)->distinct()->count('article_id'),
+                'comments_count' => (clone $inWindow)->count(),
                 'analyzed_count' => $stats['analyzed'],
                 'failed_count' => $stats['failed'],
                 'flagged_count' => $stats['flagged'],

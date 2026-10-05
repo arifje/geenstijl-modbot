@@ -3,23 +3,25 @@
 namespace Database\Seeders;
 
 use App\Models\User;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
-    use WithoutModelEvents;
-
     /**
-     * Seed the application's database.
+     * Local development only. In production, create users with
+     * `php artisan make:filament-user`.
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        if (app()->isProduction()) {
+            $this->command->warn('Skipping: create users with php artisan make:filament-user.');
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+            return;
+        }
+
+        User::firstOrCreate(
+            ['email' => 'admin@modbot.test'],
+            ['name' => 'Local admin', 'password' => 'password'],
+        );
     }
 }

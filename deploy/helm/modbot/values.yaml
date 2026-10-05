@@ -9,11 +9,14 @@ imagePullSecrets: []
 config:
   APP_ENV: production
   APP_DEBUG: "false"
+  APP_URL: https://modbot.example.com
   LOG_CHANNEL: stderr
   LOG_LEVEL: info
   CACHE_STORE: database
-  QUEUE_CONNECTION: sync
-  SESSION_DRIVER: array
+  # Runs started from the admin are queued and picked up by the scheduler.
+  QUEUE_CONNECTION: database
+  SESSION_DRIVER: database
+  SESSION_SECURE_COOKIE: "true"
   DB_CONNECTION: pgsql
   DB_HOST: postgres
   DB_PORT: "5432"
@@ -23,7 +26,9 @@ config:
   MODBOT_WINDOW_HOURS: "12"
   MODBOT_ARTICLE_LOOKBACK_HOURS: "24"
   MODBOT_ONLY_APPROVED: "true"
+  # Only seeds the first schedule; schedules are managed in the admin.
   MODBOT_REPORT_CRON: "0 8,20 * * *"
+  # Defaults; can be changed in the admin under Settings.
   SLACK_CHANNEL: "#development"
   SLACK_USERNAME: ModBot
   AHASEND_FROM_EMAIL: no-reply@platform.geenstijl.nl
@@ -47,6 +52,30 @@ resources:
     memory: 128Mi
   limits:
     memory: 384Mi
+
+# Admin panel (Filament) at /admin.
+web:
+  enabled: true
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 384Mi
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: modbot.example.com
+  tls: []
+  #  - secretName: modbot-tls
+  #    hosts: [modbot.example.com]
 
 nodeSelector: {}
 tolerations: []

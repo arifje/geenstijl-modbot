@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ModerationRun extends Model
@@ -16,7 +17,33 @@ class ModerationRun extends Model
             'finished_at' => 'datetime',
             'window_start' => 'datetime',
             'window_end' => 'datetime',
+            'dry_run' => 'boolean',
         ];
+    }
+
+    public function schedule(): BelongsTo
+    {
+        return $this->belongsTo(Schedule::class);
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Approximate cost in USD, from the token counts and the price table in
+     * config/modbot.php. Cached input tokens are counted at the full rate.
+     */
+    public function estimatedCost(): ?float
+    {
+        $prices = config("modbot.llm.prices.{$this->model}");
+
+        if ($prices === null) {
+            return null;
+        }
+
+        return ($this->input_tokens * $prices[0] + $this->output_tokens * $prices[1]) / 1_000_000;
     }
 
     public function verdicts(): HasMany

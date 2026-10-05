@@ -1,0 +1,71 @@
+{{- if .Values.web.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "modbot.fullname" . }}-web
+  labels:
+    {{- include "modbot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  replicas: {{ .Values.web.replicas }}
+  selector:
+    matchLabels:
+      {{- include "modbot.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: web
+  template:
+    metadata:
+      labels:
+        {{- include "modbot.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: web
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 82   # www-data in the alpine image
+        runAsGroup: 82
+      containers:
+        - name: web
+          image: {{ include "modbot.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["frankenphp", "php-server", "--root", "public/", "--listen", ":8080"]
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            {{- include "modbot.envFrom" . | nindent 12 }}
+          securityContext:
+            {{- include "modbot.securityContext" . | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /up
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /up
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.web.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

@@ -1,3 +1,6 @@
 <?php
 
-// No web UI yet; /up (health) is registered in bootstrap/app.php.
+use Illuminate\Support\Facades\Route;
+
+// The admin panel lives at /admin; /up is the health check.
+Route::redirect('/', '/admin');

@@ -55,6 +55,12 @@ return [
         // Comments per request. Comments are grouped per article; larger
         // articles are split into chunks of this size.
         'batch_size' => (int) env('MODBOT_LLM_BATCH_SIZE', 400),
+        // USD per million tokens [input, output], for cost estimates in the admin.
+        'prices' => [
+            'claude-opus-5-5' => [4.0, 20.0],
+            'claude-sonnet-5-5' => [2.0, 10.0],
+            'claude-haiku-4-5' => [1.0, 5.0],
+        ],
     ],
 
     /*
@@ -65,13 +71,14 @@ return [
 
     'report' => [
         'max_items' => (int) env('MODBOT_REPORT_MAX_ITEMS', 50),
+        // Only used to seed the first schedule; schedules are managed in the admin.
         'cron' => env('MODBOT_REPORT_CRON', '0 8,20 * * *'),
     ],
 
     'slack' => [
         'enabled' => (bool) env('SLACK_ENABLED', true),
         'bot_token' => env('SLACK_BOT_TOKEN'),
-        'channel' => env('SLACK_CHANNEL', '#development'),
+        'channel' => env('SLACK_CHANNEL') ?: '#development',
         // Needs the chat:write.customize scope; leave empty to use the app's own name/icon.
         'username' => env('SLACK_USERNAME', 'ModBot'),
         'icon_url' => env('SLACK_ICON_URL'),
