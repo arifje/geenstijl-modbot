@@ -133,6 +133,7 @@ All commands are run in the project directory.
 | Start | `docker compose --profile app up -d` |
 | Run from the command line | `docker compose --profile app exec scheduler php artisan modbot:run --dry-run` |
 | Add a user | `docker compose --profile app exec web php artisan make:filament-user` |
+| Update | `bin/update` (see below) |
 
 ### Change the port
 
@@ -147,11 +148,12 @@ Only the `web` container is recreated.
 ### Update to a new version
 
 ```bash
-git pull
-docker compose --profile app up -d --build
+bin/update
 ```
 
-Migrations run automatically on start.
+This fetches the latest version, shows what changed, warns about new settings in `.env.example` that are missing from your `.env`, builds the image, restarts (migrations run automatically), waits until the admin is healthy and removes old ModBot images. If the build fails, the running version keeps running.
+
+To go to a specific version, or back to an earlier one: `bin/update v1.6.2`.
 
 ### Cleanup
 
