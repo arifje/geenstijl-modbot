@@ -8,6 +8,7 @@ use App\Services\Analysis\LanguageModelFactory;
 use App\Services\Analysis\PromptRepository;
 use App\Services\Reporting\AhaSendMailer;
 use App\Support\Settings;
+use Illuminate\Console\Events\ScheduledBackgroundTaskFinished;
 use Illuminate\Console\Events\ScheduledTaskFailed;
 use Illuminate\Console\Events\ScheduledTaskFinished;
 use Illuminate\Console\Events\ScheduledTaskStarting;
@@ -61,16 +62,32 @@ class AppServiceProvider extends ServiceProvider
 
         Event::listen(ScheduledTaskStarting::class, fn ($e) => $isWorker($e->task) ? null
             : Log::info('Scheduled task started: '.$this->taskName($e->task), ['category' => 'scheduler']));
-        Event::listen(ScheduledTaskFinished::class, fn ($e) => $isWorker($e->task) && $e->task->exitCode === 0 ? null
-            : Log::log($e->task->exitCode === 0 ? 'info' : 'error', 'Scheduled task finished: '.$this->taskName($e->task), [
-                'category' => 'scheduler',
-                'exit_code' => $e->task->exitCode,
-                'seconds' => round($e->runtime, 1),
-            ]));
+        // Background tasks (runInBackground) report "finished" as soon as they are
+        // started, without an exit code; their result arrives with
+        // ScheduledBackgroundTaskFinished.
+        Event::listen(ScheduledTaskFinished::class, fn ($e) => $e->task->exitCode === null ? null
+            : $this->logTaskResult($e->task, $e->runtime));
+        Event::listen(ScheduledBackgroundTaskFinished::class, fn ($e) => $this->logTaskResult($e->task));
         Event::listen(ScheduledTaskFailed::class, fn ($e) => Log::error('Scheduled task failed: '.$this->taskName($e->task), [
             'category' => 'scheduler',
             'exception' => $e->exception,
         ]));
+    }
+
+    private function logTaskResult(object $task, ?float $seconds = null): void
+    {
+        $failed = $task->exitCode !== 0;
+
+        // The queue worker runs every minute; only log it when it fails.
+        if (! $failed && str_contains((string) $task->command, 'queue:work')) {
+            return;
+        }
+
+        Log::log($failed ? 'error' : 'info', ($failed ? 'Scheduled task failed: ' : 'Scheduled task finished: ').$this->taskName($task), array_filter([
+            'category' => 'scheduler',
+            'exit_code' => $task->exitCode,
+            'seconds' => $seconds !== null ? round($seconds, 1) : null,
+        ], fn ($value) => $value !== null));
     }
 
     private function taskName(object $task): string

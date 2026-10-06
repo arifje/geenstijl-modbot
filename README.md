@@ -153,6 +153,12 @@ docker compose --profile app up -d --build
 
 Migrations run automatically on start.
 
+### Cleanup
+
+Every night at 04:00 a cleanup removes comments, flags and runs older than 90 days, log entries older than 14 days, old failed jobs and expired cache entries. Both periods can be changed under **Settings → Report & data**, which also has **Run cleanup now**. Log entries can be cleared by hand on the **Logs** page.
+
+Log files (`LOG_STACK=daily`) are kept for `LOG_DAILY_DAYS` days, and Docker keeps at most 3 × 10 MB of output per container.
+
 ### Backup and restore the database
 
 ```bash
@@ -236,7 +242,9 @@ Secrets and defaults are environment variables, see [`.env.example`](.env.exampl
 | `MODBOT_REPORT_CRON` | `0 8,20 * * *` | Only seeds the first schedule |
 | `MODBOT_PASSWORD_LOGIN` | `true` | `false`: log in with only an emailed code |
 | `MAIL_MAILER` | `ahasend` | `log` writes mails (login codes) to `storage/logs` instead |
-| `MODBOT_RETENTION_DAYS` | `90` | `modbot:prune` runs daily |
+| `MODBOT_RETENTION_DAYS` | `90` | Days to keep comments, flags and runs (cleanup runs daily at 04:00) |
+| `MODBOT_LOG_RETENTION_DAYS` | `14` | Days to keep log entries in the admin |
+| `LOG_STACK` | `daily,database` | Where logs go: `daily` files, `database` (admin → Logs), `stderr` (container output) |
 
 ## Local development
 

@@ -22,6 +22,7 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Str;
 use UnitEnum;
 
@@ -112,10 +113,13 @@ class Settings extends Page
                                 .'If emails stop arriving, turn it back on with: php artisan modbot:password-login on'),
                     ]),
                 Section::make('Report & data')
-                    ->columns(2)
+                    ->afterHeader([$this->cleanupAction()])
+                    ->description('A cleanup runs every night at 04:00: old comments, runs, logs, failed jobs and expired cache entries are removed.')
+                    ->columns(3)
                     ->schema([
                         TextInput::make('report_max_items')->label('Max flags per report')->numeric()->minValue(1)->required(),
-                        TextInput::make('retention_days')->label('Keep data (days)')->numeric()->minValue(7)->required(),
+                        TextInput::make('retention_days')->label('Keep comments and runs (days)')->numeric()->minValue(7)->required(),
+                        TextInput::make('log_retention_days')->label('Keep logs (days)')->numeric()->minValue(1)->required(),
                     ]),
             ]);
     }
@@ -132,6 +136,23 @@ class Settings extends Page
                     ]),
                 ]),
         ]);
+    }
+
+    public function cleanupAction(): Action
+    {
+        return Action::make('cleanup')
+            ->label('Run cleanup now')
+            ->icon(Heroicon::OutlinedTrash)
+            ->color('gray')
+            ->size('sm')
+            ->requiresConfirmation()
+            ->modalDescription(fn () => 'Removes comments and runs older than '.config('modbot.retention_days').' days, log entries older than '
+                .config('modbot.log_retention_days').' days, old failed jobs and expired cache entries. Uses the saved settings.')
+            ->action(function () {
+                Artisan::call('modbot:prune');
+
+                Notification::make()->title('Cleanup done')->body(preg_replace('/^INFO\s+/', '', trim(Artisan::output())))->success()->send();
+            });
     }
 
     public function testAiAction(): Action
@@ -326,7 +347,7 @@ class Settings extends Page
     {
         $data = $this->form->getState();
 
-        foreach (['article_lookback_hours', 'report_max_items', 'retention_days'] as $key) {
+        foreach (['article_lookback_hours', 'report_max_items', 'retention_days', 'log_retention_days'] as $key) {
             $data[$key] = (int) $data[$key];
         }
 

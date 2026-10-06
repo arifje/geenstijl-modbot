@@ -5,6 +5,7 @@ namespace App\Filament\Resources\LogEntries;
 use App\Filament\Resources\LogEntries\Pages\ListLogEntries;
 use App\Models\LogEntry;
 use BackedEnum;
+use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\ViewAction;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Resources\Resource;
@@ -94,6 +95,9 @@ class LogEntryResource extends Resource
             ])
             ->recordActions([
                 ViewAction::make(),
+            ])
+            ->toolbarActions([
+                DeleteBulkAction::make(),
             ]);
     }
 

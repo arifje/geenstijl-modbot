@@ -27,6 +27,7 @@ class Settings
         'llm_effort' => 'modbot.llm.effort',
         'report_max_items' => 'modbot.report.max_items',
         'retention_days' => 'modbot.retention_days',
+        'log_retention_days' => 'modbot.log_retention_days',
         'password_login' => 'modbot.auth.password_login',
     ];
 

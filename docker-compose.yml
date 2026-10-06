@@ -5,8 +5,16 @@
 #   MODBOT_PORT     port of the admin on this machine (default 8080)
 #   DB_DATABASE / DB_USERNAME / DB_PASSWORD   used for the Postgres container
 
+# Docker keeps container output forever by default; cap it per container.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 x-app: &app
   build: .
+  logging: *logging
   image: geenstijl-modbot:local
   profiles: ["app"]
   env_file: .env
@@ -20,6 +28,7 @@ services:
   db:
     image: postgres:17-alpine
     restart: unless-stopped
+    logging: *logging
     environment:
       POSTGRES_DB: ${DB_DATABASE:-modbot}
       POSTGRES_USER: ${DB_USERNAME:-modbot}
