@@ -1,5 +1,6 @@
 <?php
 
+use App\Logging\DatabaseLogHandler;
 use Monolog\Handler\NullHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
@@ -56,6 +57,13 @@ return [
             'driver' => 'stack',
             'channels' => explode(',', (string) env('LOG_STACK', 'single')),
             'ignore_exceptions' => false,
+        ],
+
+        // Shown in the admin under System → Logs.
+        'database' => [
+            'driver' => 'monolog',
+            'handler' => DatabaseLogHandler::class,
+            'level' => env('LOG_DATABASE_LEVEL', 'info'),
         ],
 
         'single' => [

@@ -10,7 +10,9 @@ config:
   APP_ENV: production
   APP_DEBUG: "false"
   APP_URL: https://modbot.example.com
-  LOG_CHANNEL: stderr
+  # Container output + database (admin → Logs)
+  LOG_CHANNEL: stack
+  LOG_STACK: stderr,database
   LOG_LEVEL: info
   CACHE_STORE: database
   # Runs started from the admin are queued and picked up by the scheduler.
@@ -27,7 +29,7 @@ config:
   MODBOT_LLM_EFFORT: medium
   MODBOT_WINDOW_HOURS: "12"
   MODBOT_ARTICLE_LOOKBACK_HOURS: "24"
-  MODBOT_ONLY_APPROVED: "true"
+  MODBOT_APPROVAL_FILTER: unapproved
   # Only seeds the first schedule; schedules are managed in the admin.
   MODBOT_REPORT_CRON: "0 8,20 * * *"
   # Defaults; can be changed in the admin under Settings.

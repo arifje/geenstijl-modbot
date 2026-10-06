@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Services\Analysis\LanguageModelFactory;
+use App\Services\Analysis\ModelCatalog;
 use App\Services\Reporting\AhaSendMailer;
 use App\Services\Reporting\SlackNotifier;
 use App\Support\Settings as SettingsStore;
@@ -77,33 +78,29 @@ class Settings extends Page
                             ->options(['default' => 'Model default', 'low' => 'Low', 'medium' => 'Medium', 'high' => 'High'])
                             ->helperText('How long the model thinks. Use "Model default" for models without reasoning/effort support.'),
 
-                        TextInput::make('llm_model')->label('Claude model')
-                            ->visible(fn ($get) => $get('llm_provider') === 'anthropic')
-                            ->required(fn ($get) => $get('llm_provider') === 'anthropic')
-                            ->datalist(['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-4-5'])
-                            ->helperText(fn () => $this->keyStatus('anthropic', 'ANTHROPIC_API_KEY').' claude-opus-5-5 (best), claude-sonnet-5-5 (cheaper).'),
-
-                        TextInput::make('openai_model')->label('OpenAI model')
-                            ->visible(fn ($get) => $get('llm_provider') === 'openai')
-                            ->required(fn ($get) => $get('llm_provider') === 'openai')
-                            ->helperText(fn () => $this->keyStatus('openai', 'OPENAI_API_KEY').' Any model that supports structured outputs.'),
+                        $this->modelSelect('llm_model', 'anthropic', 'Claude model', 'ANTHROPIC_API_KEY'),
+                        $this->modelSelect('openai_model', 'openai', 'OpenAI model', 'OPENAI_API_KEY'),
 
                         TextInput::make('compatible_base_url')->label('Base URL')
                             ->visible(fn ($get) => $get('llm_provider') === 'openai_compatible')
                             ->required(fn ($get) => $get('llm_provider') === 'openai_compatible')
                             ->url()
+                            ->live(onBlur: true)
                             ->placeholder('https://generativelanguage.googleapis.com/v1beta/openai')
                             ->helperText('Gemini: https://generativelanguage.googleapis.com/v1beta/openai · Mistral: https://api.mistral.ai/v1 · Groq: https://api.groq.com/openai/v1 · Ollama: http://<host>:11434/v1'),
-                        TextInput::make('compatible_model')->label('Model')
-                            ->visible(fn ($get) => $get('llm_provider') === 'openai_compatible')
-                            ->required(fn ($get) => $get('llm_provider') === 'openai_compatible')
-                            ->helperText(fn () => $this->keyStatus('openai_compatible', 'LLM_COMPATIBLE_API_KEY').' The model must support JSON schema output.'),
+                        $this->modelSelect('compatible_model', 'openai_compatible', 'Model', 'LLM_COMPATIBLE_API_KEY'),
                     ]),
                 Section::make('Comments')
                     ->columns(2)
                     ->schema([
-                        Toggle::make('only_approved')->label('Only approved comments')
-                            ->helperText('Skip comments that are not approved yet (as in the Make scenario).'),
+                        Select::make('approval_filter')->label('Which comments to analyse')->required()
+                            ->options([
+                                'unapproved' => 'Not yet approved (recommended)',
+                                'approved' => 'Approved only (as in the Make scenario)',
+                                'all' => 'All visible comments',
+                            ])
+                            ->helperText('Moderators approve in batches every few hours. With "Not yet approved", a comment is analysed while it waits for approval, '
+                                .'and drops out of the report once a moderator approved or removed it. Run the schedule often (e.g. hourly) to catch comments before they are approved.'),
                         TextInput::make('article_lookback_hours')->label('Article lookback (hours)')->numeric()->minValue(1)->required()
                             ->helperText('Articles published this long ago are still checked for comments. GeenStijl closes comments after 12 hours.'),
                     ]),
@@ -179,6 +176,62 @@ class Settings extends Page
             });
     }
 
+    /** @var array<string, array{options: array<string, string>, error: ?string}> */
+    private array $modelLists = [];
+
+    /**
+     * Model dropdown, filled from the provider's model list (cached 15 minutes).
+     */
+    private function modelSelect(string $field, string $provider, string $label, string $env): Select
+    {
+        return Select::make($field)
+            ->label($label)
+            ->visible(fn ($get) => $get('llm_provider') === $provider)
+            ->required(fn ($get) => $get('llm_provider') === $provider)
+            ->searchable()
+            ->options(fn ($get, ?string $state) => $this->modelList($provider, $get('compatible_base_url'), $state)['options'])
+            ->helperText(function ($get, ?string $state) use ($provider, $env) {
+                $error = $this->modelList($provider, $get('compatible_base_url'), $state)['error'];
+
+                return trim($this->keyStatus($provider, $env).' '.($error ? "Model list unavailable: {$error}" : 'Models are refreshed every 15 minutes.')
+                    .($provider === 'openai_compatible' ? ' The model must support JSON schema output.' : ''));
+            })
+            ->suffixAction(
+                Action::make("refresh_{$field}")
+                    ->icon(Heroicon::OutlinedArrowPath)
+                    ->tooltip('Reload the model list')
+                    ->action(function ($get) use ($provider) {
+                        app(ModelCatalog::class)->forget($provider, ['base_url' => $get('compatible_base_url')]);
+                        unset($this->modelLists[$provider]);
+                    }),
+            );
+    }
+
+    /**
+     * @return array{options: array<string, string>, error: ?string}
+     */
+    private function modelList(string $provider, ?string $baseUrl, ?string $current): array
+    {
+        $this->modelLists[$provider] ??= (function () use ($provider, $baseUrl) {
+            try {
+                $overrides = $provider === 'openai_compatible' ? ['base_url' => $baseUrl] : [];
+
+                return ['options' => app(ModelCatalog::class)->models($provider, $overrides), 'error' => null];
+            } catch (\Throwable $e) {
+                return ['options' => [], 'error' => Str::limit($e->getMessage(), 200)];
+            }
+        })();
+
+        $list = $this->modelLists[$provider];
+
+        // Keep the saved model selectable, also when it is not (or no longer) listed.
+        if (filled($current) && ! array_key_exists($current, $list['options'])) {
+            $list['options'] = [$current => $current] + $list['options'];
+        }
+
+        return $list;
+    }
+
     private function keyStatus(string $provider, string $env): string
     {
         return app(LanguageModelFactory::class)->hasKey($provider)
@@ -222,19 +275,30 @@ class Settings extends Page
             ->fillForm(fn () => ['recipients' => auth()->user()->email])
             ->schema([
                 TextInput::make('recipients')->label('Send to')->required()
-                    ->helperText('Comma separated. Uses the AhaSend key and account from the environment.'),
+                    ->helperText('Comma separated. Sent the same way as the login codes.'),
             ])
             ->modalSubmitActionLabel('Send')
             ->action(function (array $data, AhaSendMailer $mailer) {
                 try {
-                    $id = $mailer->sendTest($data['recipients']);
+                    $mailerName = $mailer->sendTest($data['recipients']);
                 } catch (\Throwable $e) {
                     Notification::make()->title('Email test failed')->body($this->explain($e))->danger()->persistent()->send();
 
                     return;
                 }
 
-                Notification::make()->title('Test email accepted by AhaSend')->body("Message id: {$id}")->success()->send();
+                if (in_array($mailerName, ['log', 'array'], true)) {
+                    Notification::make()
+                        ->title('Email was not sent')
+                        ->body("The mail driver is \"{$mailerName}\": emails, including login codes, are written to the log instead of sent. Set MAIL_MAILER=ahasend in .env.")
+                        ->warning()
+                        ->persistent()
+                        ->send();
+
+                    return;
+                }
+
+                Notification::make()->title('Test email sent')->body("Via mail driver \"{$mailerName}\", the same route as the login codes.")->success()->send();
             });
     }
 

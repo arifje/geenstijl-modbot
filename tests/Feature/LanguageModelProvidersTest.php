@@ -137,7 +137,7 @@ class LanguageModelProvidersTest extends TestCase
             ->callAction('testAi')
             ->assertNotified('AI connection works');
 
-        Http::assertSent(fn (Request $r) => $r['model'] === 'gpt-other');
+        Http::assertSent(fn (Request $r) => $r->method() === 'POST' && $r['model'] === 'gpt-other');
         $this->assertDatabaseMissing('settings', ['key' => 'llm_provider']);
     }
 }

@@ -49,13 +49,14 @@ class ConnectionTestsTest extends TestCase
 
     public function test_it_sends_a_test_email_to_the_current_user_by_default(): void
     {
+        config(['mail.default' => 'ahasend']);
         Http::fake(['api.ahasend.com/*' => Http::response(['data' => [['id' => 'msg-9']]], 202)]);
 
         Livewire::test(Settings::class)
             ->mountAction('testEmail')
             ->assertActionDataSet(['recipients' => 'arjan@example.com'])
             ->callMountedAction()
-            ->assertNotified('Test email accepted by AhaSend');
+            ->assertNotified('Test email sent');
 
         Http::assertSent(fn (Request $r) => $r['recipients'] === [['email' => 'arjan@example.com']]
             && $r['subject'] === 'GeenStijl ModBot testmail');
@@ -63,12 +64,24 @@ class ConnectionTestsTest extends TestCase
 
     public function test_a_missing_api_key_is_reported(): void
     {
-        config(['modbot.email.api_key' => null]);
+        config(['modbot.email.api_key' => null, 'mail.default' => 'ahasend']);
         Http::fake();
 
         Livewire::test(Settings::class)
             ->callAction('testEmail', data: ['recipients' => 'arjan@example.com'])
             ->assertNotified('Email test failed');
+
+        Http::assertNothingSent();
+    }
+
+    public function test_it_warns_when_mail_is_only_logged(): void
+    {
+        config(['mail.default' => 'log']);
+        Http::fake();
+
+        Livewire::test(Settings::class)
+            ->callAction('testEmail', data: ['recipients' => 'arjan@example.com'])
+            ->assertNotified('Email was not sent');
 
         Http::assertNothingSent();
     }

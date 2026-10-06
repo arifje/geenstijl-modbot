@@ -37,8 +37,11 @@ return [
     'window_hours' => (int) env('MODBOT_WINDOW_HOURS', 12),
     'article_lookback_hours' => (int) env('MODBOT_ARTICLE_LOOKBACK_HOURS', 24),
 
-    // Same filters as the Make scenario: only approved, visible comments.
-    'only_approved' => (bool) env('MODBOT_ONLY_APPROVED', true),
+    // Which visible comments are analysed and reported:
+    //   unapproved  not yet approved by a moderator (default)
+    //   approved    only approved comments (what the Make scenario did)
+    //   all         both
+    'approval_filter' => env('MODBOT_APPROVAL_FILTER', 'unapproved'),
     'statuses' => ['visible'],
 
     /*
@@ -82,8 +85,16 @@ return [
         // USD per million tokens [input, output], for cost estimates in the
         // admin. Models without a price show no cost.
         'prices' => [
+            'claude-fable-5-1' => [10.0, 50.0],
+            'claude-fable-5' => [10.0, 50.0],
             'claude-opus-5-5' => [4.0, 20.0],
+            'claude-opus-5' => [5.0, 25.0],
+            'claude-opus-4-8' => [5.0, 25.0],
+            'claude-opus-4-7' => [5.0, 25.0],
+            'claude-opus-4-6' => [5.0, 25.0],
             'claude-sonnet-5-5' => [2.0, 10.0],
+            'claude-sonnet-5' => [2.0, 10.0],
+            'claude-sonnet-4-6' => [3.0, 15.0],
             'claude-haiku-4-5' => [1.0, 5.0],
         ],
     ],
@@ -121,6 +132,8 @@ return [
     ],
 
     'retention_days' => (int) env('MODBOT_RETENTION_DAYS', 90),
+    // Log entries shown in the admin (System → Logs).
+    'log_retention_days' => (int) env('MODBOT_LOG_RETENTION_DAYS', 14),
 
     'auth' => [
         // false: log in with only a code sent by email (no password).

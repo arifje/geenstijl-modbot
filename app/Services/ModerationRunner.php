@@ -8,6 +8,7 @@ use App\Services\Reporting\AhaSendMailer;
 use App\Services\Reporting\SlackNotifier;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Runs the pipeline and delivers the report. Shared by the CLI, the
@@ -28,7 +29,12 @@ class ModerationRunner
      */
     public function run(RunOptions $options, ?callable $progress = null): ModerationRun
     {
-        $progress ??= fn (string $message) => null;
+        $output = $progress ?? fn (string $message) => null;
+        // Progress also goes to the log (admin → Logs, category "run").
+        $progress = function (string $message) use ($output) {
+            Log::info($message, ['category' => 'run']);
+            $output($message);
+        };
 
         $queued = $options->runId ? ModerationRun::find($options->runId) : null;
 
@@ -57,10 +63,19 @@ class ModerationRunner
             try {
                 $run = $this->pipeline->run($options, $progress);
             } catch (\Throwable $e) {
+                Log::error('Run failed: '.$e->getMessage(), ['category' => 'run', 'exception' => $e]);
                 $this->notifyFailure($options, $e);
 
                 throw $e;
             }
+
+            Log::info("Run #{$run->id} {$run->status}: {$run->analyzed_count} analysed, {$run->flagged_count} flagged", [
+                'category' => 'run',
+                'run_id' => $run->id,
+                'model' => $run->model,
+                'input_tokens' => $run->input_tokens,
+                'output_tokens' => $run->output_tokens,
+            ]);
 
             if (! $options->dryRun) {
                 $this->deliver($run, $options->sendSlack, $options->sendEmail, $options->slackChannel, $progress);
@@ -91,7 +106,7 @@ class ModerationRunner
                 $run->update(['slack_channel' => $channel, 'slack_ts' => $this->slack->send($report, $channel)]);
                 $progress("Posted report to Slack {$channel}");
             } catch (\Throwable $e) {
-                report($e);
+                Log::error('Sending the report to Slack failed: '.$e->getMessage(), ['category' => 'run', 'run_id' => $run->id]);
                 $errors[] = 'Slack: '.$e->getMessage();
             }
         }
@@ -101,7 +116,7 @@ class ModerationRunner
                 $run->update(['email_message_id' => $this->mailer->send($report)]);
                 $progress('Sent email report');
             } catch (\Throwable $e) {
-                report($e);
+                Log::error('Sending the report by email failed: '.$e->getMessage(), ['category' => 'run', 'run_id' => $run->id]);
                 $errors[] = 'Email: '.$e->getMessage();
             }
         }

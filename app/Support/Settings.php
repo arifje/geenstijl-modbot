@@ -17,7 +17,7 @@ class Settings
         'slack_channel' => 'modbot.slack.channel',
         'email_enabled' => 'modbot.email.enabled',
         'email_recipients' => 'modbot.email.recipients',
-        'only_approved' => 'modbot.only_approved',
+        'approval_filter' => 'modbot.approval_filter',
         'article_lookback_hours' => 'modbot.article_lookback_hours',
         'llm_provider' => 'modbot.llm.provider',
         'llm_model' => 'modbot.llm.providers.anthropic.model',

@@ -24,7 +24,8 @@ COPY --from=vendor --chown=www-data:www-data /app /app
 
 ENV APP_ENV=production \
     APP_DEBUG=false \
-    LOG_CHANNEL=stderr \
+    LOG_CHANNEL=stack \
+    LOG_STACK=stderr,database \
     LOG_LEVEL=info \
     SERVER_NAME=:8080
 

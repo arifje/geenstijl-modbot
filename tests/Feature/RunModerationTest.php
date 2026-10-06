@@ -8,6 +8,7 @@ use App\Models\CommentVerdict;
 use App\Models\ModerationRun;
 use App\Models\Schedule;
 use App\Services\Analysis\LanguageModel;
+use App\Services\ModerationPipeline;
 use App\Services\ModerationRunner;
 use App\Services\RunOptions;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -78,7 +79,7 @@ class RunModerationTest extends TestCase
                     $this->comment('c-old-parent', '2026-10-04T20:00:00', 'Oude reactie waarop gereageerd wordt'),
                     $this->comment('c-threat', '2026-10-05T11:30:00', 'Pas maar op, ik weet waar je woont.', parentId: 'c-old-parent'),
                     $this->comment('c-fine', '2026-10-05T11:00:00', 'Gewoon een grap & een mening'),
-                    $this->comment('c-pending', '2026-10-05T11:45:00', 'Nog niet goedgekeurd', approved: false),
+                    $this->comment('c-approved', '2026-10-05T11:45:00', 'Al goedgekeurd door een moderator', approved: true),
                     $this->comment('c-removed', '2026-10-05T11:40:00', 'Al verwijderd', status: 'removed'),
                 ],
             ]),
@@ -93,7 +94,7 @@ class RunModerationTest extends TestCase
     {
         $this->artisan('modbot:run')->assertSuccessful();
 
-        // Only approved, visible comments in the window are analysed.
+        // Only unapproved, visible comments in the window are analysed.
         $this->assertSame(['c-fine', 'c-threat'], Comment::whereNotNull('analyzed_at')->orderBy('id')->pluck('id')->all());
 
         // The parent is sent as context, not as a comment to judge.
@@ -214,7 +215,27 @@ class RunModerationTest extends TestCase
         $this->assertSame('Worker timed out', $run->fresh()->error);
     }
 
-    private function comment(string $id, string $createdAt, string $content, ?string $parentId = null, bool $approved = true, string $status = 'visible'): array
+    public function test_a_flag_drops_out_of_the_report_once_a_moderator_approved_the_comment(): void
+    {
+        $this->artisan('modbot:run --no-slack --no-email')->assertSuccessful();
+        $this->assertSame(1, CommentVerdict::count());
+
+        Comment::whereKey('c-threat')->update(['approved' => true]);
+
+        $report = app(ModerationPipeline::class)->report(ModerationRun::latest('id')->first());
+        $this->assertCount(0, $report->items);
+    }
+
+    public function test_the_approval_filter_can_select_approved_comments(): void
+    {
+        config(['modbot.approval_filter' => 'approved']);
+
+        $this->artisan('modbot:run --no-slack --no-email')->assertSuccessful();
+
+        $this->assertSame(['c-approved'], Comment::whereNotNull('analyzed_at')->pluck('id')->all());
+    }
+
+    private function comment(string $id, string $createdAt, string $content, ?string $parentId = null, bool $approved = false, string $status = 'visible'): array
     {
         return [
             'id' => $id,

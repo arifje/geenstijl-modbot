@@ -3,6 +3,7 @@
 namespace App\Services\Reporting;
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -22,16 +23,26 @@ class AhaSendMailer
     }
 
     /**
-     * Sends a short message to check the AhaSend connection.
+     * Sends a short test message through Laravel's default mailer, the same
+     * route as the login codes. Returns the mailer that was used.
      */
-    public function sendTest(string $recipients): ?string
+    public function sendTest(string $recipients): string
     {
-        return $this->post(
-            $recipients,
-            'GeenStijl ModBot testmail',
-            view('emails.test')->render(),
-            'Dit is een testmail van GeenStijl ModBot. De e-mailkoppeling (AhaSend) werkt.',
-        );
+        $to = $this->recipients($recipients);
+
+        if ($to === []) {
+            throw new RuntimeException('No email recipients given.');
+        }
+
+        Mail::html(view('emails.test')->render(), function ($message) use ($to) {
+            foreach ($to as $recipient) {
+                $message->to($recipient['email'], $recipient['name'] ?? null);
+            }
+
+            $message->subject('GeenStijl ModBot testmail');
+        });
+
+        return config('mail.default');
     }
 
     private function post(string $recipients, string $subject, string $html, string $text): ?string

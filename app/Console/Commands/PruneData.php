@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Article;
+use App\Models\LogEntry;
 use App\Models\ModerationRun;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
@@ -20,7 +21,9 @@ class PruneData extends Command
         $articles = Article::where('published_at', '<', $cutoff)->delete();
         $runs = ModerationRun::where('started_at', '<', $cutoff)->delete();
 
-        $this->components->info("Pruned {$articles} articles and {$runs} runs older than {$cutoff->toDateString()}");
+        $logs = LogEntry::where('created_at', '<', now()->subDays(config('modbot.log_retention_days')))->delete();
+
+        $this->components->info("Pruned {$articles} articles and {$runs} runs older than {$cutoff->toDateString()}, and {$logs} log entries");
 
         return self::SUCCESS;
     }

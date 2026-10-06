@@ -19,6 +19,14 @@
     </source>
     <php>
         <env name="APP_ENV" value="testing"/>
+        <!-- Never call real APIs from tests, whatever .env contains. -->
+        <env name="ANTHROPIC_API_KEY" value="" force="true"/>
+        <env name="OPENAI_API_KEY" value="" force="true"/>
+        <env name="LLM_COMPATIBLE_API_KEY" value="" force="true"/>
+        <env name="SLACK_BOT_TOKEN" value="" force="true"/>
+        <env name="AHASEND_API_KEY" value="" force="true"/>
+        <env name="AHASEND_ACCOUNT_ID" value="" force="true"/>
+        <env name="MAIL_MAILER" value="array" force="true"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
@@ -26,7 +34,6 @@
         <env name="DB_CONNECTION" value="sqlite"/>
         <env name="DB_DATABASE" value=":memory:"/>
         <env name="DB_URL" value=""/>
-        <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>

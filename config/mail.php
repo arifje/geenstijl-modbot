@@ -14,7 +14,9 @@ return [
     |
     */
 
-    'default' => env('MAIL_MAILER', 'log'),
+    // Login codes go through this mailer. Without MAIL_MAILER, use AhaSend
+    // when it is configured, so codes never end up in the log by accident.
+    'default' => env('MAIL_MAILER', env('AHASEND_API_KEY') ? 'ahasend' : 'log'),
 
     /*
     |--------------------------------------------------------------------------

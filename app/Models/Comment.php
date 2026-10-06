@@ -49,7 +49,8 @@ class Comment extends Model
     {
         $query->whereBetween('posted_at', [$from, $to])
             ->whereIn('status', config('modbot.statuses'))
-            ->when(config('modbot.only_approved'), fn (Builder $q) => $q->where('approved', true));
+            ->when(config('modbot.approval_filter') === 'unapproved', fn (Builder $q) => $q->where('approved', false))
+            ->when(config('modbot.approval_filter') === 'approved', fn (Builder $q) => $q->where('approved', true));
     }
 
     /**

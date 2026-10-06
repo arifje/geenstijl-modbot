@@ -222,7 +222,7 @@ Secrets and defaults are environment variables, see [`.env.example`](.env.exampl
 | `MODBOT_LLM_EFFORT` | `medium` | `low`, `medium`, `high`, or `default` for models without effort support |
 | `MODBOT_WINDOW_HOURS` | `12` | Default window for runs |
 | `MODBOT_ARTICLE_LOOKBACK_HOURS` | `24` | Articles published in this period are checked. GeenStijl closes comments 12h after publication |
-| `MODBOT_ONLY_APPROVED` | `true` | Skip comments that are not approved yet |
+| `MODBOT_APPROVAL_FILTER` | `unapproved` | Which comments to analyse: `unapproved` (waiting for a moderator), `approved` or `all` |
 | `MODBOT_REPORT_CRON` | `0 8,20 * * *` | Only seeds the first schedule |
 | `MODBOT_PASSWORD_LOGIN` | `true` | `false`: log in with only an emailed code |
 | `MAIL_MAILER` | `ahasend` | `log` writes mails (login codes) to `storage/logs` instead |
