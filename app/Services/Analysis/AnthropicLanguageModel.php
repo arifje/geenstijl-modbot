@@ -16,7 +16,7 @@ class AnthropicLanguageModel implements LanguageModel
 
     public function complete(string $system, string $input, ?array $schema = null): LlmResult
     {
-        $outputConfig = ['effort' => $this->effort];
+        $outputConfig = $this->effort === 'default' ? [] : ['effort' => $this->effort];
 
         if ($schema !== null) {
             $outputConfig['format'] = ['type' => 'json_schema', 'schema' => $schema];
@@ -32,7 +32,7 @@ class AnthropicLanguageModel implements LanguageModel
                 messages: [
                     ['role' => 'user', 'content' => $input],
                 ],
-                outputConfig: $outputConfig,
+                outputConfig: $outputConfig ?: null,
                 // Retry on another model if a safety classifier declines the request.
                 fallbacks: 'default',
                 betas: ['server-side-fallback-2026-07-01'],

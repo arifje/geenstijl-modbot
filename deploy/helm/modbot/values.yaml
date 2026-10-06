@@ -21,6 +21,8 @@ config:
   DB_HOST: postgres
   DB_PORT: "5432"
   DB_DATABASE: modbot
+  MAIL_MAILER: ahasend
+  MODBOT_LLM_PROVIDER: anthropic
   MODBOT_LLM_MODEL: claude-opus-5-5
   MODBOT_LLM_EFFORT: medium
   MODBOT_WINDOW_HOURS: "12"
@@ -39,6 +41,7 @@ config:
 # sealed-secrets or external-secrets) or let the chart create one.
 # Expected keys: APP_KEY, DB_USERNAME, DB_PASSWORD, ANTHROPIC_API_KEY,
 # SLACK_BOT_TOKEN, AHASEND_API_KEY, AHASEND_ACCOUNT_ID
+# Optional: OPENAI_API_KEY, LLM_COMPATIBLE_API_KEY
 existingSecret: ""
 secret: {}
 

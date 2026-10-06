@@ -12,10 +12,7 @@ use Illuminate\Support\Facades\Log;
  */
 class SentimentSummarizer
 {
-    public function __construct(
-        private LanguageModel $model,
-        private PromptRepository $prompts,
-    ) {}
+    public function __construct(private PromptRepository $prompts) {}
 
     /**
      * @param  array<int, string>  $summaries  article id => summary
@@ -38,7 +35,7 @@ class SentimentSummarizer
         ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
 
         try {
-            $result = $this->model->complete($this->prompts->get('summary'), $input);
+            $result = app(LanguageModel::class)->complete($this->prompts->get('summary'), $input);
         } catch (\Throwable $e) {
             Log::error('Summarising sentiment failed', ['error' => $e->getMessage()]);
 

@@ -2,6 +2,9 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Pages\Auth\Login;
+use App\Notifications\LoginCode;
+use Filament\Auth\MultiFactor\Email\EmailAuthentication;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -10,6 +13,7 @@ use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
+use Filament\View\PanelsRenderHook;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
@@ -25,7 +29,15 @@ class AdminPanelProvider extends PanelProvider
             ->default()
             ->id('admin')
             ->path('admin')
-            ->login()
+            ->login(Login::class)
+            // Password + a code sent by email, required for every user.
+            ->multiFactorAuthentication([
+                EmailAuthentication::make()
+                    ->codeExpiryMinutes(10)
+                    ->codeNotification(LoginCode::class),
+            ], isRequired: true)
+            // Keep the admin out of search engines (see also the NoIndex middleware).
+            ->renderHook(PanelsRenderHook::HEAD_START, fn () => '<meta name="robots" content="noindex, nofollow">')
             ->brandName('ModBot')
             ->colors([
                 'primary' => Color::Red,

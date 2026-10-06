@@ -43,6 +43,7 @@ class ModerationRun extends Model
 
         return [
             'trigger' => $options->trigger,
+            'provider' => config('modbot.llm.provider'),
             'schedule_id' => $options->scheduleId,
             'user_id' => $options->userId,
             'dry_run' => $options->dryRun,

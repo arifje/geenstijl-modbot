@@ -34,4 +34,8 @@ RUN php artisan package:discover --ansi \
 
 EXPOSE 8080
 
+# The base image checks Caddy's admin endpoint, which is not used here.
+# docker-compose and Kubernetes define their own checks per role.
+HEALTHCHECK NONE
+
 CMD ["php", "artisan", "schedule:work"]

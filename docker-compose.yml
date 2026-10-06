@@ -1,45 +1,66 @@
+# Local development:   docker compose up -d db   (then run php artisan on your machine)
+# Full stack (server): docker compose --profile app up -d --build
+#
+# Settings come from .env (Docker Compose reads it automatically):
+#   MODBOT_PORT     port of the admin on this machine (default 8080)
+#   DB_DATABASE / DB_USERNAME / DB_PASSWORD   used for the Postgres container
+
+x-app: &app
+  build: .
+  image: geenstijl-modbot:local
+  profiles: ["app"]
+  env_file: .env
+  restart: unless-stopped
+  environment:
+    # Inside Docker the database is the "db" service, whatever .env says.
+    DB_HOST: db
+    DB_PORT: 5432
+
 services:
   db:
     image: postgres:17-alpine
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: modbot
-      POSTGRES_USER: modbot
-      POSTGRES_PASSWORD: modbot
+      POSTGRES_DB: ${DB_DATABASE:-modbot}
+      POSTGRES_USER: ${DB_USERNAME:-modbot}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-modbot}
     ports:
-      - "54329:5432"
+      # Only reachable from this machine (for running artisan locally).
+      - "127.0.0.1:${MODBOT_DB_PORT:-54329}:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U modbot"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-modbot}"]
       interval: 5s
       retries: 10
 
-  # Same two roles as in Kubernetes.
-  # Start with: docker compose --profile app up --build
-  scheduler:
-    build: .
-    profiles: ["app"]
-    env_file: .env
-    environment:
-      DB_HOST: db
-      DB_PORT: 5432
+  # Runs the database migrations, then exits. The other services wait for it.
+  migrate:
+    <<: *app
+    restart: "no"
+    command: ["php", "artisan", "migrate", "--force"]
     depends_on:
       db:
         condition: service_healthy
 
-  web:
-    build: .
-    profiles: ["app"]
-    command: ["frankenphp", "php-server", "--root", "public/", "--listen", ":8080"]
-    env_file: .env
-    environment:
-      DB_HOST: db
-      DB_PORT: 5432
-    ports:
-      - "8080:8080"
+  scheduler:
+    <<: *app
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    <<: *app
+    command: ["frankenphp", "php-server", "--root", "public/", "--listen", ":8080"]
+    ports:
+      - "${MODBOT_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/up"]
+      interval: 30s
+      retries: 3
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   db-data:

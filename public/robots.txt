@@ -1,2 +1,5 @@
+# Private admin. Every response carries "X-Robots-Tag: noindex, nofollow".
+# Crawling is deliberately not blocked here: a crawler has to fetch a page
+# to see that header, and a URL blocked by robots.txt can still be indexed.
 User-agent: *
 Disallow:

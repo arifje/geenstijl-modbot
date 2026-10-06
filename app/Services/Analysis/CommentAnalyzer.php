@@ -19,10 +19,7 @@ use Illuminate\Support\Str;
  */
 class CommentAnalyzer
 {
-    public function __construct(
-        private LanguageModel $model,
-        private PromptRepository $prompts,
-    ) {}
+    public function __construct(private PromptRepository $prompts) {}
 
     /**
      * @param  Collection<int, Comment>  $comments  comments not analysed yet
@@ -31,7 +28,15 @@ class CommentAnalyzer
     public function analyze(ModerationRun $run, Collection $comments): array
     {
         $stats = ['analyzed' => 0, 'failed' => 0, 'flagged' => 0, 'summaries' => []];
+
+        if ($comments->isEmpty()) {
+            return $stats;
+        }
+
         $system = $this->prompts->get('moderation');
+        // Resolved here (not injected) so a misconfigured provider fails the run
+        // instead of the command, and a provider switched in the admin is used.
+        $model = app(LanguageModel::class);
 
         $comments->loadMissing('article', 'parent');
 
@@ -41,7 +46,7 @@ class CommentAnalyzer
 
             foreach ($articleComments->sortBy('posted_at')->chunk(config('modbot.llm.batch_size')) as $chunk) {
                 try {
-                    $result = $this->model->complete($system, $this->buildInput($article, $chunk), $this->schema());
+                    $result = $model->complete($system, $this->buildInput($article, $chunk), $this->schema());
                     $data = $result->json();
                 } catch (\Throwable $e) {
                     Log::error('Analysing comments failed', ['article' => $article->id, 'error' => $e->getMessage()]);

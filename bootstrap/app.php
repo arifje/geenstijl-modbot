@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\NoIndex;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -14,6 +15,9 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // Behind the Kubernetes ingress: trust X-Forwarded-* so URLs use https.
         $middleware->trustProxies(at: '*');
+
+        // Private admin: keep it out of search engines.
+        $middleware->append(NoIndex::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

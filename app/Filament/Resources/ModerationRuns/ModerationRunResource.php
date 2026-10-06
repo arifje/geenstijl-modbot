@@ -67,7 +67,8 @@ class ModerationRunResource extends Resource
                         TextEntry::make('window_start')->label('Window')
                             ->formatStateUsing(fn (ModerationRun $record) => $record->window_start->timezone('Europe/Amsterdam')->format('d-m H:i').' – '.$record->window_end->timezone('Europe/Amsterdam')->format('d-m H:i')),
                         TextEntry::make('duration')->state(fn (ModerationRun $record) => $record->finished_at ? $record->started_at->diffForHumans($record->finished_at, true) : '—'),
-                        TextEntry::make('model')->placeholder('—'),
+                        TextEntry::make('model')->placeholder('—')
+                            ->prefix(fn (ModerationRun $record) => $record->provider ? "{$record->provider} · " : ''),
                         TextEntry::make('prompt_version')->placeholder('—'),
                     ]),
                 Section::make('Results')
@@ -116,7 +117,8 @@ class ModerationRunResource extends Resource
                 TextColumn::make('analyzed_count')->label('Analysed')->numeric(),
                 TextColumn::make('flagged_count')->label('Flagged')->numeric()
                     ->color(fn (int $state) => $state > 0 ? 'warning' : null),
-                TextColumn::make('cost')->state(fn (ModerationRun $record) => self::formatCost($record)),
+                TextColumn::make('cost')->state(fn (ModerationRun $record) => self::formatCost($record))
+                    ->description(fn (ModerationRun $record) => $record->model),
                 IconColumn::make('slack_ts')->label('Slack')->boolean()->state(fn (ModerationRun $record) => filled($record->slack_ts)),
                 IconColumn::make('email_message_id')->label('Email')->boolean()->state(fn (ModerationRun $record) => filled($record->email_message_id)),
             ])

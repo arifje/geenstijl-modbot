@@ -2,11 +2,13 @@
 
 namespace App\Providers;
 
-use Anthropic\Client;
-use App\Services\Analysis\AnthropicLanguageModel;
+use App\Mail\AhaSendTransport;
 use App\Services\Analysis\LanguageModel;
+use App\Services\Analysis\LanguageModelFactory;
 use App\Services\Analysis\PromptRepository;
+use App\Services\Reporting\AhaSendMailer;
 use App\Support\Settings;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -15,20 +17,15 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->singleton(PromptRepository::class);
 
-        $this->app->bind(LanguageModel::class, function () {
-            $config = config('modbot.llm');
-
-            return new AnthropicLanguageModel(
-                client: new Client(apiKey: $config['api_key']),
-                model: $config['model'],
-                effort: $config['effort'],
-                maxTokens: $config['max_tokens'],
-            );
-        });
+        // Resolved per run, so a provider switched in the admin is used by the next run.
+        $this->app->bind(LanguageModel::class, fn () => app(LanguageModelFactory::class)->make());
     }
 
     public function boot(): void
     {
         Settings::apply();
+
+        // MAIL_MAILER=ahasend sends Laravel mail (login codes) through the AhaSend API.
+        Mail::extend('ahasend', fn () => new AhaSendTransport(app(AhaSendMailer::class)));
     }
 }

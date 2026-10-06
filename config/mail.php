@@ -70,6 +70,11 @@ return [
             'path' => env('MAIL_SENDMAIL_PATH', '/usr/sbin/sendmail -bs -i'),
         ],
 
+        // Sends through the AhaSend API (app/Mail/AhaSendTransport.php).
+        'ahasend' => [
+            'transport' => 'ahasend',
+        ],
+
         'log' => [
             'transport' => 'log',
             'channel' => env('MAIL_LOG_CHANNEL'),
@@ -111,8 +116,9 @@ return [
     */
 
     'from' => [
-        'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
-        'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),
+        // Defaults to the AhaSend sender used for the reports.
+        'address' => env('MAIL_FROM_ADDRESS', env('AHASEND_FROM_EMAIL', 'no-reply@platform.geenstijl.nl')),
+        'name' => env('MAIL_FROM_NAME', 'GeenStijl ModBot'),
     ],
 
 ];

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Services\Analysis\LanguageModelFactory;
 use App\Services\Reporting\AhaSendMailer;
 use App\Services\Reporting\SlackNotifier;
 use App\Support\Settings as SettingsStore;
@@ -33,7 +34,7 @@ class Settings extends Page
 
     protected static string|UnitEnum|null $navigationGroup = 'Configuration';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 3;
 
     /** @var array<string, mixed> */
     public ?array $data = [];
@@ -65,21 +66,53 @@ class Settings extends Page
                             ->helperText('Comma separated; "Name <email>" is allowed.')
                             ->rows(2),
                     ]),
-                Section::make('Analysis')
+                Section::make('AI provider')
+                    ->afterHeader([$this->testAiAction()])
+                    ->description('API keys come from the environment. Each provider keeps its own model, so switching back and forth is one click.')
                     ->columns(2)
                     ->schema([
-                        Select::make('llm_model')->label('Claude model')->required()
-                            ->options([
-                                'claude-opus-5-5' => 'Claude Opus 5.5 (default)',
-                                'claude-sonnet-5-5' => 'Claude Sonnet 5.5 (cheaper)',
-                            ]),
+                        Select::make('llm_provider')->label('Provider')->required()->live()
+                            ->options(LanguageModelFactory::PROVIDERS),
                         Select::make('llm_effort')->label('Effort')->required()
-                            ->options(['low' => 'Low', 'medium' => 'Medium', 'high' => 'High'])
-                            ->helperText('Higher effort thinks longer: more accurate, slower and more expensive.'),
+                            ->options(['default' => 'Model default', 'low' => 'Low', 'medium' => 'Medium', 'high' => 'High'])
+                            ->helperText('How long the model thinks. Use "Model default" for models without reasoning/effort support.'),
+
+                        TextInput::make('llm_model')->label('Claude model')
+                            ->visible(fn ($get) => $get('llm_provider') === 'anthropic')
+                            ->required(fn ($get) => $get('llm_provider') === 'anthropic')
+                            ->datalist(['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-4-5'])
+                            ->helperText(fn () => $this->keyStatus('anthropic', 'ANTHROPIC_API_KEY').' claude-opus-5-5 (best), claude-sonnet-5-5 (cheaper).'),
+
+                        TextInput::make('openai_model')->label('OpenAI model')
+                            ->visible(fn ($get) => $get('llm_provider') === 'openai')
+                            ->required(fn ($get) => $get('llm_provider') === 'openai')
+                            ->helperText(fn () => $this->keyStatus('openai', 'OPENAI_API_KEY').' Any model that supports structured outputs.'),
+
+                        TextInput::make('compatible_base_url')->label('Base URL')
+                            ->visible(fn ($get) => $get('llm_provider') === 'openai_compatible')
+                            ->required(fn ($get) => $get('llm_provider') === 'openai_compatible')
+                            ->url()
+                            ->placeholder('https://generativelanguage.googleapis.com/v1beta/openai')
+                            ->helperText('Gemini: https://generativelanguage.googleapis.com/v1beta/openai · Mistral: https://api.mistral.ai/v1 · Groq: https://api.groq.com/openai/v1 · Ollama: http://<host>:11434/v1'),
+                        TextInput::make('compatible_model')->label('Model')
+                            ->visible(fn ($get) => $get('llm_provider') === 'openai_compatible')
+                            ->required(fn ($get) => $get('llm_provider') === 'openai_compatible')
+                            ->helperText(fn () => $this->keyStatus('openai_compatible', 'LLM_COMPATIBLE_API_KEY').' The model must support JSON schema output.'),
+                    ]),
+                Section::make('Comments')
+                    ->columns(2)
+                    ->schema([
                         Toggle::make('only_approved')->label('Only approved comments')
                             ->helperText('Skip comments that are not approved yet (as in the Make scenario).'),
                         TextInput::make('article_lookback_hours')->label('Article lookback (hours)')->numeric()->minValue(1)->required()
                             ->helperText('Articles published this long ago are still checked for comments. GeenStijl closes comments after 12 hours.'),
+                    ]),
+                Section::make('Login')
+                    ->schema([
+                        Toggle::make('password_login')->label('Password login')
+                            ->helperText(fn () => 'On: password + a code by email. Off: only a code by email (no passwords to steal). '
+                                .'Codes are sent with mail driver "'.config('mail.default').'"; send a test email first. '
+                                .'If emails stop arriving, turn it back on with: php artisan modbot:password-login on'),
                     ]),
                 Section::make('Report & data')
                     ->columns(2)
@@ -102,6 +135,55 @@ class Settings extends Page
                     ]),
                 ]),
         ]);
+    }
+
+    public function testAiAction(): Action
+    {
+        return Action::make('testAi')
+            ->label('Test AI connection')
+            ->icon(Heroicon::OutlinedSparkles)
+            ->color('gray')
+            ->size('sm')
+            ->modalDescription('Sends a tiny request to the provider and model currently selected in this form (also when not saved yet). Costs a fraction of a cent.')
+            ->modalSubmitActionLabel('Test')
+            ->action(function (LanguageModelFactory $factory) {
+                $current = $this->form->getRawState();
+
+                // Test the values in the form, without saving them.
+                foreach (array_intersect_key($current, SettingsStore::KEYS) as $key => $value) {
+                    config([SettingsStore::KEYS[$key] => $value]);
+                }
+
+                $started = microtime(true);
+
+                try {
+                    $result = $factory->make($current['llm_provider'])->complete(
+                        'Je test een verbinding. Antwoord met precies: OK',
+                        'Test',
+                    );
+                } catch (\Throwable $e) {
+                    Notification::make()->title('AI test failed')->body($this->explain($e))->danger()->persistent()->send();
+
+                    return;
+                } finally {
+                    SettingsStore::apply();
+                }
+
+                $seconds = number_format(microtime(true) - $started, 1);
+
+                Notification::make()
+                    ->title('AI connection works')
+                    ->body("{$result->model} answered \"".Str::limit($result->text, 40)."\" in {$seconds}s.")
+                    ->success()
+                    ->send();
+            });
+    }
+
+    private function keyStatus(string $provider, string $env): string
+    {
+        return app(LanguageModelFactory::class)->hasKey($provider)
+            ? "API key ({$env}): set ✓."
+            : "API key ({$env}): not set ✗.";
     }
 
     public function testSlackAction(): Action

@@ -36,8 +36,16 @@ class AhaSendMailer
 
     private function post(string $recipients, string $subject, string $html, string $text): ?string
     {
+        return $this->deliver($this->recipients($recipients), $subject, $html, $text);
+    }
+
+    /**
+     * @param  list<array{email: string, name?: string}>  $recipients
+     * @param  array{email: string, name?: string}|null  $from  defaults to the configured sender
+     */
+    public function deliver(array $recipients, string $subject, ?string $html, ?string $text, ?array $from = null): ?string
+    {
         $config = config('modbot.email');
-        $recipients = $this->recipients($recipients);
 
         if ($recipients === []) {
             throw new RuntimeException('No email recipients configured.');
@@ -51,14 +59,14 @@ class AhaSendMailer
             ->asJson()
             ->acceptJson()
             ->timeout(40)
-            ->post("https://api.ahasend.com/v2/accounts/{$config['account_id']}/messages", [
-                'from' => ['email' => $config['from_email'], 'name' => $config['from_name']],
+            ->post("https://api.ahasend.com/v2/accounts/{$config['account_id']}/messages", array_filter([
+                'from' => $from ?? ['email' => $config['from_email'], 'name' => $config['from_name']],
                 'recipients' => $recipients,
                 'subject' => $subject,
                 'html_content' => $html,
                 'text_content' => $text,
                 'sandbox' => $config['sandbox'],
-            ])
+            ], fn ($value) => $value !== null))
             ->throw()
             ->json();
 

@@ -19,10 +19,15 @@ class Settings
         'email_recipients' => 'modbot.email.recipients',
         'only_approved' => 'modbot.only_approved',
         'article_lookback_hours' => 'modbot.article_lookback_hours',
-        'llm_model' => 'modbot.llm.model',
+        'llm_provider' => 'modbot.llm.provider',
+        'llm_model' => 'modbot.llm.providers.anthropic.model',
+        'openai_model' => 'modbot.llm.providers.openai.model',
+        'compatible_model' => 'modbot.llm.providers.openai_compatible.model',
+        'compatible_base_url' => 'modbot.llm.providers.openai_compatible.base_url',
         'llm_effort' => 'modbot.llm.effort',
         'report_max_items' => 'modbot.report.max_items',
         'retention_days' => 'modbot.retention_days',
+        'password_login' => 'modbot.auth.password_login',
     ];
 
     /**

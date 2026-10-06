@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Users;
 
+use App\Filament\Pages\Auth\Login;
 use App\Filament\Resources\Users\Pages\CreateUser;
 use App\Filament\Resources\Users\Pages\EditUser;
 use App\Filament\Resources\Users\Pages\ListUsers;
@@ -25,7 +26,7 @@ class UserResource extends Resource
 
     protected static string|UnitEnum|null $navigationGroup = 'Configuration';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 4;
 
     public static function form(Schema $schema): Schema
     {
@@ -37,9 +38,13 @@ class UserResource extends Resource
                     ->password()
                     ->revealable()
                     ->minLength(10)
-                    ->required(fn (string $operation) => $operation === 'create')
+                    ->required(fn (string $operation) => $operation === 'create' && Login::passwordLoginEnabled())
                     ->dehydrated(fn (?string $state) => filled($state))
-                    ->helperText(fn (string $operation) => $operation === 'edit' ? 'Leave empty to keep the current password.' : null),
+                    ->helperText(fn (string $operation) => match (true) {
+                        ! Login::passwordLoginEnabled() => 'Optional: password login is off, users log in with a code by email.',
+                        $operation === 'edit' => 'Leave empty to keep the current password.',
+                        default => null,
+                    }),
             ]);
     }
 

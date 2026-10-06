@@ -48,14 +48,39 @@ return [
     */
 
     'llm' => [
-        'api_key' => env('ANTHROPIC_API_KEY'),
-        'model' => env('MODBOT_LLM_MODEL', 'claude-opus-5-5'),
+        // anthropic, openai or openai_compatible. Can be switched in the admin.
+        'provider' => env('MODBOT_LLM_PROVIDER', 'anthropic'),
+        // low, medium, high, or "default" to let the provider/model decide.
         'effort' => env('MODBOT_LLM_EFFORT', 'medium'),
         'max_tokens' => (int) env('MODBOT_LLM_MAX_TOKENS', 16000),
+        'timeout' => (int) env('MODBOT_LLM_TIMEOUT', 600),
+
+        // API keys stay in the environment; models and the base URL can be
+        // changed in the admin.
+        'providers' => [
+            'anthropic' => [
+                'api_key' => env('ANTHROPIC_API_KEY'),
+                'model' => env('MODBOT_LLM_MODEL', 'claude-opus-5-5'),
+            ],
+            'openai' => [
+                'api_key' => env('OPENAI_API_KEY'),
+                'model' => env('OPENAI_MODEL'),
+                'base_url' => env('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
+            ],
+            // Any provider with an OpenAI-compatible chat completions API
+            // (Google Gemini, Mistral, Groq, Ollama, ...).
+            'openai_compatible' => [
+                'api_key' => env('LLM_COMPATIBLE_API_KEY'),
+                'model' => env('LLM_COMPATIBLE_MODEL'),
+                'base_url' => env('LLM_COMPATIBLE_BASE_URL'),
+            ],
+        ],
+
         // Comments per request. Comments are grouped per article; larger
         // articles are split into chunks of this size.
         'batch_size' => (int) env('MODBOT_LLM_BATCH_SIZE', 400),
-        // USD per million tokens [input, output], for cost estimates in the admin.
+        // USD per million tokens [input, output], for cost estimates in the
+        // admin. Models without a price show no cost.
         'prices' => [
             'claude-opus-5-5' => [4.0, 20.0],
             'claude-sonnet-5-5' => [2.0, 10.0],
@@ -96,5 +121,11 @@ return [
     ],
 
     'retention_days' => (int) env('MODBOT_RETENTION_DAYS', 90),
+
+    'auth' => [
+        // false: log in with only a code sent by email (no password).
+        // Switch in the admin under Settings, or: php artisan modbot:password-login on|off
+        'password_login' => (bool) env('MODBOT_PASSWORD_LOGIN', true),
+    ],
 
 ];
