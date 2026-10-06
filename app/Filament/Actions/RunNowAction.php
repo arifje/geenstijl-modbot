@@ -3,6 +3,7 @@
 namespace App\Filament\Actions;
 
 use App\Jobs\RunModerationJob;
+use App\Models\ModerationRun;
 use App\Models\Schedule;
 use App\Services\RunOptions;
 use Filament\Actions\Action;
@@ -52,11 +53,12 @@ class RunNowAction
                     userId: auth()->id(),
                 );
 
-                RunModerationJob::dispatch($options->toArray());
+                $run = ModerationRun::queue($options);
+                RunModerationJob::dispatch([...$options->toArray(), 'runId' => $run->id]);
 
                 Notification::make()
                     ->title('Run queued')
-                    ->body('It will appear under Runs within a minute.')
+                    ->body("Run #{$run->id} starts within a minute.")
                     ->success()
                     ->send();
             });

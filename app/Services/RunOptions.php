@@ -16,6 +16,8 @@ final readonly class RunOptions
         public string $trigger = 'cli',
         public ?int $scheduleId = null,
         public ?int $userId = null,
+        // Set when the run was queued from the admin and already has a record.
+        public ?int $runId = null,
     ) {}
 
     public static function fromSchedule(Schedule $schedule): self

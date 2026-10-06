@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\ModerationRuns;
 
+use App\Filament\Actions\CancelRunAction;
 use App\Filament\Resources\ModerationRuns\Pages\ListModerationRuns;
 use App\Filament\Resources\ModerationRuns\Pages\ViewModerationRun;
 use App\Filament\Resources\ModerationRuns\RelationManagers\VerdictsRelationManager;
@@ -39,6 +40,7 @@ class ModerationRunResource extends Resource
     public static function statusColor(string $status): string
     {
         return match ($status) {
+            'queued', 'running' => 'info',
             'succeeded' => 'success',
             'partial' => 'warning',
             'failed' => 'danger',
@@ -59,7 +61,9 @@ class ModerationRunResource extends Resource
                             ->formatStateUsing(fn (string $state, ModerationRun $record) => $record->schedule ? "{$state}: {$record->schedule->name}" : $state)
                             ->suffix(fn (ModerationRun $record) => $record->user ? " ({$record->user->name})" : ''),
                         TextEntry::make('dry_run')->label('Dry run')->formatStateUsing(fn (bool $state) => $state ? 'Yes' : 'No'),
-                        TextEntry::make('started_at')->dateTime('d-m-Y H:i:s', 'Europe/Amsterdam'),
+                        TextEntry::make('started_at')
+                            ->label(fn (ModerationRun $record) => $record->status === 'queued' ? 'Queued at' : 'Started at')
+                            ->dateTime('d-m-Y H:i:s', 'Europe/Amsterdam'),
                         TextEntry::make('window_start')->label('Window')
                             ->formatStateUsing(fn (ModerationRun $record) => $record->window_start->timezone('Europe/Amsterdam')->format('d-m H:i').' – '.$record->window_end->timezone('Europe/Amsterdam')->format('d-m H:i')),
                         TextEntry::make('duration')->state(fn (ModerationRun $record) => $record->finished_at ? $record->started_at->diffForHumans($record->finished_at, true) : '—'),
@@ -118,12 +122,14 @@ class ModerationRunResource extends Resource
             ])
             ->filters([
                 SelectFilter::make('status')->options([
-                    'running' => 'Running', 'succeeded' => 'Succeeded', 'partial' => 'Partial', 'failed' => 'Failed',
+                    'queued' => 'Queued', 'running' => 'Running', 'succeeded' => 'Succeeded',
+                    'partial' => 'Partial', 'failed' => 'Failed', 'cancelled' => 'Cancelled',
                 ]),
                 SelectFilter::make('trigger')->options(['schedule' => 'Schedule', 'manual' => 'Manual', 'cli' => 'CLI']),
                 TernaryFilter::make('dry_run'),
             ])
             ->recordActions([
+                CancelRunAction::make(),
                 ViewAction::make(),
             ]);
     }
@@ -137,7 +143,7 @@ class ModerationRunResource extends Resource
 
     public static function slackPreview(ModerationRun $record): string
     {
-        if ($record->status === 'running' || $record->status === 'failed') {
+        if (! in_array($record->status, ['succeeded', 'partial'], true)) {
             return '—';
         }
 

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\ModerationRuns\Pages;
 
+use App\Filament\Actions\CancelRunAction;
 use App\Filament\Resources\ModerationRuns\ModerationRunResource;
 use App\Models\ModerationRun;
 use App\Services\ModerationRunner;
@@ -20,6 +21,7 @@ class ViewModerationRun extends ViewRecord
         $deliverable = fn (ModerationRun $record) => in_array($record->status, ['succeeded', 'partial'], true);
 
         return [
+            CancelRunAction::make()->after(fn () => $this->refreshFormData(['status', 'finished_at'])),
             Action::make('sendSlack')
                 ->label('Send to Slack')
                 ->icon(Heroicon::OutlinedChatBubbleLeftRight)

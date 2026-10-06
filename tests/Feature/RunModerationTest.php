@@ -2,11 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\RunModerationJob;
 use App\Models\Comment;
 use App\Models\CommentVerdict;
 use App\Models\ModerationRun;
 use App\Models\Schedule;
 use App\Services\Analysis\LanguageModel;
+use App\Services\ModerationRunner;
+use App\Services\RunOptions;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Carbon;
@@ -181,6 +184,34 @@ class RunModerationTest extends TestCase
 
         Http::assertSent(fn (Request $r) => str_contains($r->url(), 'slack.com') && $r['channel'] === '#moderatie');
         Http::assertNotSent(fn (Request $r) => str_contains($r->url(), 'ahasend'));
+    }
+
+    public function test_a_queued_run_is_picked_up_by_the_job(): void
+    {
+        Carbon::setTestNow('2026-10-05 09:55:00');
+        $run = ModerationRun::queue(new RunOptions(windowHours: 12, sendEmail: false, trigger: 'manual'));
+        Carbon::setTestNow('2026-10-05 10:00:00');
+
+        (new RunModerationJob([...(new RunOptions(windowHours: 12, sendEmail: false, trigger: 'manual'))->toArray(), 'runId' => $run->id]))
+            ->handle(app(ModerationRunner::class));
+
+        // Same record, now finished, with the window starting when the job ran.
+        $this->assertSame(1, ModerationRun::count());
+        $run->refresh();
+        $this->assertSame('succeeded', $run->status);
+        $this->assertSame('2026-10-05 10:00:00', $run->window_end->toDateTimeString());
+        $this->assertSame(2, $run->analyzed_count);
+        $this->assertSame('111.222', $run->slack_ts);
+    }
+
+    public function test_a_failed_job_does_not_leave_the_run_queued(): void
+    {
+        $run = ModerationRun::queue(new RunOptions(windowHours: 12, trigger: 'manual'));
+
+        (new RunModerationJob(['runId' => $run->id]))->failed(new \RuntimeException('Worker timed out'));
+
+        $this->assertSame('failed', $run->fresh()->status);
+        $this->assertSame('Worker timed out', $run->fresh()->error);
     }
 
     private function comment(string $id, string $createdAt, string $content, ?string $parentId = null, bool $approved = true, string $status = 'visible'): array

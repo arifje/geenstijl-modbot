@@ -33,20 +33,20 @@ class ModerationPipeline
     public function run(RunOptions $options, ?callable $progress = null): ModerationRun
     {
         $progress ??= fn (string $message) => null;
-        $now = now();
         $windowHours = $options->windowHours;
         $reanalyze = $options->reanalyze;
 
-        $run = ModerationRun::create([
-            'trigger' => $options->trigger,
-            'schedule_id' => $options->scheduleId,
-            'user_id' => $options->userId,
-            'dry_run' => $options->dryRun,
-            'started_at' => $now,
-            'window_start' => $now->copy()->subHours($windowHours),
-            'window_end' => $now,
+        // The window starts when the run starts, also for a run that was queued earlier.
+        $attributes = [
+            ...ModerationRun::attributesFor($options),
+            'status' => 'running',
             'prompt_version' => $this->prompts->version('moderation'),
-        ]);
+        ];
+
+        $run = $options->runId
+            ? tap(ModerationRun::findOrFail($options->runId))->update($attributes)
+            : ModerationRun::create($attributes);
+        $now = $run->window_end;
 
         try {
             $lookback = max($windowHours, config('modbot.article_lookback_hours'));

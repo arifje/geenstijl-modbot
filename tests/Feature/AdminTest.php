@@ -7,6 +7,8 @@ use App\Jobs\RunModerationJob;
 use App\Models\ModerationRun;
 use App\Models\Schedule;
 use App\Models\User;
+use App\Services\ModerationRunner;
+use App\Services\RunOptions;
 use App\Support\Settings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -59,10 +61,32 @@ class AdminTest extends TestCase
             ->callAction('runNow', data: ['windowHours' => 6, 'dryRun' => true, 'reanalyze' => false])
             ->assertNotified('Run queued');
 
+        // The run shows up right away as queued.
+        $run = ModerationRun::sole();
+        $this->assertSame('queued', $run->status);
+        $this->assertTrue($run->dry_run);
+        $this->assertSame(auth()->id(), $run->user_id);
+
         Queue::assertPushed(RunModerationJob::class, fn (RunModerationJob $job) => $job->options['windowHours'] === 6
             && $job->options['dryRun'] === true
             && $job->options['trigger'] === 'manual'
-            && $job->options['userId'] === auth()->id());
+            && $job->options['runId'] === $run->id);
+    }
+
+    public function test_a_queued_run_can_be_cancelled(): void
+    {
+        $run = ModerationRun::queue(new RunOptions(windowHours: 12, trigger: 'manual'));
+
+        Livewire::test(ListModerationRuns::class)
+            ->callTableAction('cancel', $run)
+            ->assertNotified('Run cancelled');
+
+        $this->assertSame('cancelled', $run->fresh()->status);
+
+        // The job skips it.
+        (new RunModerationJob([...(new RunOptions(windowHours: 12))->toArray(), 'runId' => $run->id]))->handle(app(ModerationRunner::class));
+        $this->assertSame('cancelled', $run->fresh()->status);
+        $this->assertSame(1, ModerationRun::count());
     }
 
     public function test_stored_settings_override_the_environment(): void

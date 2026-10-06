@@ -27,7 +27,7 @@ class StatsOverview extends StatsOverviewWidget
             Stat::make('Last run', $lastRun ? $lastRun->started_at->timezone('Europe/Amsterdam')->format('d-m H:i') : '—')
                 ->description($lastRun ? "{$lastRun->status} · {$lastRun->analyzed_count} analysed · {$lastRun->flagged_count} flagged" : 'No runs yet')
                 ->color(match ($lastRun?->status) {
-                    'succeeded' => 'success', 'partial' => 'warning', 'failed' => 'danger', default => 'gray',
+                    'queued', 'running' => 'info', 'succeeded' => 'success', 'partial' => 'warning', 'failed' => 'danger', default => 'gray',
                 }),
             Stat::make('Next run', $next ? $next->timezone('Europe/Amsterdam')->format('D d-m H:i') : '—')
                 ->description($next ? $next->diffForHumans() : 'No enabled schedules'),

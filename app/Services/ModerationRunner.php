@@ -30,12 +30,22 @@ class ModerationRunner
     {
         $progress ??= fn (string $message) => null;
 
+        $queued = $options->runId ? ModerationRun::find($options->runId) : null;
+
+        if ($options->runId && $queued?->status !== 'queued') {
+            $progress('Run was cancelled or already handled; skipping.');
+
+            return $queued ?? throw new \RuntimeException("Run {$options->runId} no longer exists.");
+        }
+
         // Two runs at the same time would analyse the same comments twice.
         $lock = Cache::lock('modbot:run', 1800);
 
         try {
             $lock->block(600);
         } catch (LockTimeoutException) {
+            $queued?->update(['status' => 'failed', 'error' => 'Another run was still in progress.', 'finished_at' => now()]);
+
             throw new \RuntimeException('Another run is still in progress.');
         }
 

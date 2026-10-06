@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\ModerationRun;
 use App\Services\ModerationRunner;
 use App\Services\RunOptions;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -27,5 +28,15 @@ class RunModerationJob implements ShouldQueue
     public function handle(ModerationRunner $runner): void
     {
         $runner->run(RunOptions::fromArray($this->options));
+    }
+
+    /**
+     * E.g. a timeout or a killed worker: don't leave the run "queued" or "running".
+     */
+    public function failed(?\Throwable $e): void
+    {
+        ModerationRun::whereKey($this->options['runId'] ?? null)
+            ->whereIn('status', ['queued', 'running'])
+            ->update(['status' => 'failed', 'error' => $e?->getMessage() ?? 'Job failed', 'finished_at' => now()]);
     }
 }
