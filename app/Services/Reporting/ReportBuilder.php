@@ -45,6 +45,7 @@ class ReportBuilder
             articlesCount: (clone $comments)->distinct()->count('article_id'),
             commentsCount: (clone $comments)->count(),
             failedCount: $run->failed_count,
+            syncFailedCount: $run->sync_failed_count,
             items: $items,
             sentiment: $run->sentiment,
         );

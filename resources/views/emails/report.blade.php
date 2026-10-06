@@ -16,6 +16,9 @@
         @if ($report->failedCount > 0)
             <p style="margin:0 0 8px;color:#b45309;">{{ $report->failedCount }} reacties konden niet worden geanalyseerd</p>
         @endif
+        @if ($report->syncFailedCount > 0)
+            <p style="margin:0 0 8px;color:#b45309;">Reacties van {{ $report->syncFailedCount }} artikelen konden niet worden opgehaald</p>
+        @endif
 
         <h2 style="font-size:18px;color:#0f172a;margin:24px 0 8px;">Sfeer en sentiment</h2>
         <p style="margin:0;">

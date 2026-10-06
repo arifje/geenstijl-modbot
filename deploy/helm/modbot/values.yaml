@@ -19,6 +19,9 @@ config:
   QUEUE_CONNECTION: database
   SESSION_DRIVER: database
   SESSION_SECURE_COOKIE: "true"
+  # Proxies whose X-Forwarded-* headers are trusted. Include your pod network
+  # if it is not in 10.0.0.0/8 (e.g. Calico's default 192.168.0.0/16).
+  TRUSTED_PROXIES: "127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12"
   DB_CONNECTION: pgsql
   DB_HOST: postgres
   DB_PORT: "5432"

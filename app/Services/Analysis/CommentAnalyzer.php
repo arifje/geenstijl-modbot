@@ -48,7 +48,7 @@ class CommentAnalyzer
             foreach ($articleComments->sortBy('posted_at')->chunk(config('modbot.llm.batch_size')) as $chunk) {
                 try {
                     $result = $model->complete($system, $this->buildInput($article, $chunk), $this->schema());
-                    $data = $result->json();
+                    $data = $this->validated($result->json());
                 } catch (\Throwable $e) {
                     Log::error('Analysing comments failed', ['article' => $article->id, 'error' => $e->getMessage()]);
                     $stats['failed'] += $chunk->count();
@@ -90,13 +90,16 @@ class CommentAnalyzer
         $count = 0;
 
         DB::transaction(function () use ($run, $chunk, $flags, $model, $byId, &$count) {
+            $flaggedIds = [];
+
             foreach ($flags as $flag) {
                 $comment = $byId->get($flag['comment_id'] ?? null);
                 $priority = Priority::tryFrom($flag['priority'] ?? '');
                 $category = Category::tryFrom($flag['category'] ?? '');
 
-                // Ignore ids the model invented or context comments it flagged anyway.
-                if ($comment === null || $priority === null || $category === null) {
+                // Ignore ids the model invented, context comments it flagged anyway,
+                // and a second flag for the same comment.
+                if ($comment === null || $priority === null || $category === null || isset($flaggedIds[$comment->id])) {
                     Log::warning('Ignoring invalid flag', ['flag' => $flag]);
 
                     continue;
@@ -111,8 +114,15 @@ class CommentAnalyzer
                     'model' => $model,
                     'prompt_version' => $this->prompts->version('moderation'),
                 ]);
+                $flaggedIds[$comment->id] = true;
                 $count++;
             }
+
+            // Re-analysis: comments in this batch that are no longer flagged lose
+            // their earlier flag. Only reached when the batch succeeded.
+            CommentVerdict::whereIn('comment_id', $chunk->pluck('id'))
+                ->whereNotIn('comment_id', array_keys($flaggedIds))
+                ->delete();
 
             Comment::whereIn('id', $chunk->pluck('id'))->update([
                 'analyzed_at' => now(),
@@ -121,6 +131,34 @@ class CommentAnalyzer
         });
 
         return $count;
+    }
+
+    /**
+     * Structured output guarantees this shape for Anthropic and OpenAI, but not
+     * for every OpenAI-compatible provider. An unusable response must fail the
+     * batch, not mark its comments as reviewed.
+     *
+     * @return array{summary?: string, flags: list<array<string, mixed>>}
+     *
+     * @throws LlmException
+     */
+    private function validated(mixed $data): array
+    {
+        if (! is_array($data) || ! array_key_exists('flags', $data) || ! is_array($data['flags']) || ! array_is_list($data['flags'])) {
+            throw new LlmException('The model response has no valid "flags" list.');
+        }
+
+        foreach ($data['flags'] as $flag) {
+            if (! is_array($flag) || ! is_string($flag['comment_id'] ?? null)) {
+                throw new LlmException('The model response contains a flag without a comment_id.');
+            }
+        }
+
+        if (isset($data['summary']) && ! is_string($data['summary'])) {
+            throw new LlmException('The model response has an invalid "summary".');
+        }
+
+        return $data;
     }
 
     /**

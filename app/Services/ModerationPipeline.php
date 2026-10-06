@@ -53,14 +53,25 @@ class ModerationPipeline
             $synced = $this->sync->sync($now->copy()->subHours($lookback), $run->window_start);
             $progress("Synced {$synced['articles']} articles, {$synced['comments']} comments");
 
+            // Comments that could not be fetched are not analysed; don't report success.
+            $syncFailed = count($synced['failed']);
+            $run->sync_failed_count = $syncFailed;
+
+            if ($syncFailed > 0 && $syncFailed === $synced['fetched']) {
+                throw new RuntimeException("Comments could not be fetched for any of the {$syncFailed} articles, see the log.");
+            }
+
+            if ($syncFailed > 0) {
+                $run->error = "Comments could not be fetched for {$syncFailed} of {$synced['fetched']} articles (".implode(', ', $synced['failed']).').';
+                $progress($run->error);
+            }
+
             $pending = Comment::moderatable($run->window_start, $run->window_end)
                 ->unless($reanalyze, fn ($q) => $q->whereNull('analyzed_at'))
                 ->get();
 
-            if ($reanalyze) {
-                CommentVerdict::whereIn('comment_id', $pending->pluck('id'))->delete();
-            }
-
+            // With $reanalyze, earlier flags are replaced per batch once that batch
+            // succeeds (CommentAnalyzer::store); a failed batch keeps them.
             $progress("Analysing {$pending->count()} new comments");
             $stats = $this->analyzer->analyze($run, $pending);
             $progress("Analysed {$stats['analyzed']}, flagged {$stats['flagged']}, failed {$stats['failed']}");
@@ -87,7 +98,7 @@ class ModerationPipeline
             }
 
             $run->fill([
-                'status' => $stats['failed'] > 0 ? 'partial' : 'succeeded',
+                'status' => $stats['failed'] > 0 || $syncFailed > 0 ? 'partial' : 'succeeded',
                 'finished_at' => now(),
             ])->save();
         } catch (\Throwable $e) {

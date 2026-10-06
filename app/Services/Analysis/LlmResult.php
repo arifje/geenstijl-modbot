@@ -14,7 +14,7 @@ final readonly class LlmResult
     /**
      * @return array<string, mixed>
      */
-    public function json(): array
+    public function json(): mixed
     {
         return json_decode($this->text, true, flags: JSON_THROW_ON_ERROR);
     }

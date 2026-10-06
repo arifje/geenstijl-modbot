@@ -50,12 +50,21 @@ class ModerationRunner
         try {
             $lock->block(600);
         } catch (LockTimeoutException) {
-            $queued?->update(['status' => 'failed', 'error' => 'Another run was still in progress.', 'finished_at' => now()]);
+            ModerationRun::whereKey($options->runId)->where('status', 'queued')
+                ->update(['status' => 'failed', 'error' => 'Another run was still in progress.', 'finished_at' => now()]);
 
             throw new \RuntimeException('Another run is still in progress.');
         }
 
         try {
+            // Claim the queued run now that we hold the lock: it may have been
+            // cancelled while we were waiting for another run to finish.
+            if ($options->runId && ! ModerationRun::whereKey($options->runId)->where('status', 'queued')->update(['status' => 'running'])) {
+                $progress('Run was cancelled while waiting; skipping.');
+
+                return ModerationRun::findOrFail($options->runId);
+            }
+
             if ($options->scheduleId) {
                 Schedule::whereKey($options->scheduleId)->update(['last_run_at' => now()]);
             }
@@ -122,7 +131,8 @@ class ModerationRunner
         }
 
         if ($errors !== []) {
-            $run->update(['error' => implode("\n", $errors)]);
+            // Keep earlier problems of the run (e.g. comments that could not be fetched).
+            $run->update(['error' => implode("\n", array_filter([$run->error, ...$errors]))]);
         }
 
         return $errors;

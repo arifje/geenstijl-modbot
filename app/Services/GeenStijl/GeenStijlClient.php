@@ -56,9 +56,14 @@ class GeenStijlClient
             ->throw()
             ->json();
 
+        // An incomplete response would make existing comments look deleted.
+        if (! is_array($response) || ! array_key_exists('data', $response) || ! is_array($response['data']) || ! array_is_list($response['data'])) {
+            throw new \UnexpectedValueException("Unexpected comments response for article {$articleId}");
+        }
+
         return [
             'closed' => (bool) ($response['closed'] ?? false),
-            'data' => $response['data'] ?? [],
+            'data' => $response['data'],
         ];
     }
 

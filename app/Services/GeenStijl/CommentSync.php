@@ -16,12 +16,15 @@ class CommentSync
     public function __construct(private GeenStijlClient $client) {}
 
     /**
-     * @return array{articles: int, comments: int}
+     * @return array{articles: int, comments: int, fetched: int, failed: list<int>}
+     *                                                                              failed: ids of articles whose comments could not be fetched
      */
     public function sync(Carbon $articlesSince, Carbon $commentsSince): array
     {
         $articles = $this->client->articlesSince($articlesSince);
         $commentCount = 0;
+        $fetched = 0;
+        $failed = [];
 
         foreach ($articles as $data) {
             $article = Article::updateOrCreate(['id' => $data['id']], [
@@ -37,21 +40,25 @@ class CommentSync
 
             // Closed articles are synced too, so status changes made by
             // moderators after closing (e.g. removals) are picked up.
-            $commentCount += $this->syncComments($article, $commentsSince);
+            $fetched++;
+
+            try {
+                $commentCount += $this->syncComments($article, $commentsSince);
+            } catch (\Throwable $e) {
+                Log::warning("Fetching comments of article {$article->id} failed: {$e->getMessage()}", ['category' => 'run', 'article' => $article->id]);
+                $failed[] = $article->id;
+            }
         }
 
-        return ['articles' => count($articles), 'comments' => $commentCount];
+        return ['articles' => count($articles), 'comments' => $commentCount, 'fetched' => $fetched, 'failed' => $failed];
     }
 
+    /**
+     * @throws \Throwable when the comments cannot be fetched
+     */
     private function syncComments(Article $article, Carbon $since): int
     {
-        try {
-            $response = $this->client->comments($article->id);
-        } catch (\Throwable $e) {
-            Log::warning('Fetching comments failed', ['article' => $article->id, 'error' => $e->getMessage()]);
-
-            return 0;
-        }
+        $response = $this->client->comments($article->id);
 
         $now = now();
         $rows = collect($response['data'])
@@ -79,7 +86,7 @@ class CommentSync
         $parentIds = $inWindow->pluck('parent_id')->filter()->flip();
         $keep = $rows->filter(fn (array $r) => $r['posted_at']->gte($since) || $parentIds->has($r['id']));
 
-        DB::transaction(function () use ($keep, $article, $response, $now) {
+        DB::transaction(function () use ($keep, $rows, $article, $response, $now) {
             foreach ($keep->chunk(200) as $chunk) {
                 Comment::upsert(
                     $chunk->values()->all(),
@@ -87,6 +94,13 @@ class CommentSync
                     ['parent_id', 'author_username', 'author_premium', 'author_newbie', 'content', 'status', 'approved', 'kudos', 'reports', 'updated_at'],
                 );
             }
+
+            // The response holds every comment of the article: stored comments
+            // that are no longer in it were deleted at GeenStijl.
+            Comment::where('article_id', $article->id)
+                ->whereNotIn('id', $rows->pluck('id')->all())
+                ->where('status', '!=', 'gone')
+                ->update(['status' => 'gone', 'updated_at' => $now]);
 
             $article->forceFill([
                 'comments_closed' => $response['closed'],

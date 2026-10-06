@@ -26,6 +26,10 @@ class SlackFormatter
             $lines[] = "⚠️ *{$report->failedCount}* reacties konden niet worden geanalyseerd";
         }
 
+        if ($report->syncFailedCount > 0) {
+            $lines[] = "⚠️ Reacties van *{$report->syncFailedCount}* artikelen konden niet worden opgehaald";
+        }
+
         $lines[] = '';
         $lines[] = '*💬 Sfeer en sentiment*';
         $lines[] = $report->commentsCount === 0

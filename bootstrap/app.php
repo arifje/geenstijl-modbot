@@ -13,8 +13,14 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // Behind the Kubernetes ingress: trust X-Forwarded-* so URLs use https.
-        $middleware->trustProxies(at: '*');
+        // Trust X-Forwarded-* (client IP for login throttling, https) only from
+        // the proxy in front of the app: by default loopback and the private
+        // ranges Docker and Kubernetes use. A client connecting directly from
+        // elsewhere cannot spoof its IP. Set TRUSTED_PROXIES to narrow or widen.
+        $middleware->trustProxies(at: array_map('trim', explode(',', (string) env(
+            'TRUSTED_PROXIES',
+            '127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12',
+        ))));
 
         // Private admin: keep it out of search engines.
         $middleware->append(NoIndex::class);

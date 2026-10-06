@@ -6,6 +6,9 @@ GeenStijl {!! lcfirst($report->title()) !!}
 @if ($report->failedCount > 0)
 {!! $report->failedCount !!} reacties konden niet worden geanalyseerd
 @endif
+@if ($report->syncFailedCount > 0)
+Reacties van {!! $report->syncFailedCount !!} artikelen konden niet worden opgehaald
+@endif
 
 SFEER EN SENTIMENT
 {!! $report->commentsCount === 0 ? 'Geen recente reacties beschikbaar voor beoordeling.' : ($report->sentiment ?? 'Geen samenvatting beschikbaar.') !!}

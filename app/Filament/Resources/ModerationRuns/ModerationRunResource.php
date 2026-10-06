@@ -78,7 +78,8 @@ class ModerationRunResource extends Resource
                         TextEntry::make('articles_count')->label('Articles'),
                         TextEntry::make('analyzed_count')->label('Analysed in this run'),
                         TextEntry::make('flagged_count')->label('Flagged in this run'),
-                        TextEntry::make('failed_count')->label('Failed'),
+                        TextEntry::make('failed_count')->label('Analysis failed'),
+                        TextEntry::make('sync_failed_count')->label('Articles not fetched'),
                         TextEntry::make('tokens')->state(fn (ModerationRun $record) => number_format($record->input_tokens, 0, ',', '.').' in / '.number_format($record->output_tokens, 0, ',', '.').' out'),
                         TextEntry::make('cost')->state(fn (ModerationRun $record) => self::formatCost($record)),
                         TextEntry::make('delivery')->state(fn (ModerationRun $record) => collect([

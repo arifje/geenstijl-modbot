@@ -18,6 +18,7 @@ final readonly class Report
         public int $articlesCount,
         public int $commentsCount,
         public int $failedCount,
+        public int $syncFailedCount,
         public Collection $items,
         public ?string $sentiment,
     ) {}

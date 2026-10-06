@@ -47,8 +47,10 @@ class RunModeration extends Command
             return self::SUCCESS;
         }
 
-        if ($run->error) {
-            $this->components->error($run->error);
+        // Partial runs and delivery errors fail the command, so they show up as
+        // a failed scheduled task in the logs.
+        if ($run->error || $run->status !== 'succeeded') {
+            $this->components->error($run->error ?: "Run finished with status {$run->status}.");
 
             return self::FAILURE;
         }

@@ -20,7 +20,9 @@ class SentimentSummarizer
     public function summarize(ModerationRun $run, array $categoryCounts): ?string
     {
         $summaries = ArticleSummary::with('article')
-            ->whereBetween('created_at', [$run->window_start, $run->window_end])
+            // Includes the summaries this run just created (after window_end).
+            ->where('created_at', '>=', $run->window_start)
+            ->where('created_at', '<=', now())
             ->orderBy('id')
             ->get()
             ->groupBy('article_id');
