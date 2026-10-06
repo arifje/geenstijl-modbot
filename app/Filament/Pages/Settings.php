@@ -2,6 +2,8 @@
 
 namespace App\Filament\Pages;
 
+use App\Services\Reporting\AhaSendMailer;
+use App\Services\Reporting\SlackNotifier;
 use App\Support\Settings as SettingsStore;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -17,6 +19,8 @@ use Filament\Schemas\Components\Form;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Str;
 use UnitEnum;
 
 /**
@@ -45,6 +49,7 @@ class Settings extends Page
             ->statePath('data')
             ->components([
                 Section::make('Slack')
+                    ->afterHeader([$this->testSlackAction()])
                     ->columns(2)
                     ->schema([
                         Toggle::make('slack_enabled')->label('Enabled')->inline(false),
@@ -52,6 +57,7 @@ class Settings extends Page
                             ->helperText('Schedules can override this. The bot must be a member of the channel.'),
                     ]),
                 Section::make('Email (AhaSend)')
+                    ->afterHeader([$this->testEmailAction()])
                     ->columns(2)
                     ->schema([
                         Toggle::make('email_enabled')->label('Enabled')->inline(false),
@@ -96,6 +102,78 @@ class Settings extends Page
                     ]),
                 ]),
         ]);
+    }
+
+    public function testSlackAction(): Action
+    {
+        return Action::make('testSlack')
+            ->label('Send test message')
+            ->icon(Heroicon::OutlinedPaperAirplane)
+            ->color('gray')
+            ->size('sm')
+            ->fillForm(fn () => ['channel' => config('modbot.slack.channel')])
+            ->schema([
+                TextInput::make('channel')->label('Slack channel')->required()
+                    ->helperText('Uses the bot token from the environment. The bot must be a member of the channel.'),
+            ])
+            ->modalSubmitActionLabel('Send')
+            ->action(function (array $data, SlackNotifier $slack) {
+                try {
+                    $slack->notice('✅ Testbericht van ModBot: de Slack-koppeling werkt. (verstuurd door '.auth()->user()->name.')', $data['channel']);
+                } catch (\Throwable $e) {
+                    Notification::make()->title('Slack test failed')->body($this->explain($e))->danger()->persistent()->send();
+
+                    return;
+                }
+
+                Notification::make()->title("Test message posted to {$data['channel']}")->success()->send();
+            });
+    }
+
+    public function testEmailAction(): Action
+    {
+        return Action::make('testEmail')
+            ->label('Send test email')
+            ->icon(Heroicon::OutlinedPaperAirplane)
+            ->color('gray')
+            ->size('sm')
+            ->fillForm(fn () => ['recipients' => auth()->user()->email])
+            ->schema([
+                TextInput::make('recipients')->label('Send to')->required()
+                    ->helperText('Comma separated. Uses the AhaSend key and account from the environment.'),
+            ])
+            ->modalSubmitActionLabel('Send')
+            ->action(function (array $data, AhaSendMailer $mailer) {
+                try {
+                    $id = $mailer->sendTest($data['recipients']);
+                } catch (\Throwable $e) {
+                    Notification::make()->title('Email test failed')->body($this->explain($e))->danger()->persistent()->send();
+
+                    return;
+                }
+
+                Notification::make()->title('Test email accepted by AhaSend')->body("Message id: {$id}")->success()->send();
+            });
+    }
+
+    /**
+     * Turn API errors into something actionable.
+     */
+    private function explain(\Throwable $e): string
+    {
+        $message = $e instanceof RequestException
+            ? "HTTP {$e->response->status()}: ".($e->response->json('message') ?? $e->response->json('error') ?? $e->response->body())
+            : $e->getMessage();
+
+        $hint = match (true) {
+            str_contains($message, 'not_in_channel') => ' Invite the bot to the channel first (/invite @modbot).',
+            str_contains($message, 'channel_not_found') => ' Check the channel name, or invite the bot if it is a private channel.',
+            str_contains($message, 'invalid_auth'), str_contains($message, 'not_authed') => ' The Slack bot token is invalid.',
+            str_contains($message, 'HTTP 401'), str_contains($message, 'HTTP 403') => ' Check the API key and account id.',
+            default => '',
+        };
+
+        return Str::limit($message, 300).$hint;
     }
 
     public function save(): void

@@ -13,11 +13,38 @@ class AhaSendMailer
      */
     public function send(Report $report): ?string
     {
+        return $this->post(
+            config('modbot.email.recipients'),
+            'GeenStijl '.Str::lcfirst($report->title()),
+            view('emails.report', ['report' => $report])->render(),
+            view('emails.report-text', ['report' => $report])->render(),
+        );
+    }
+
+    /**
+     * Sends a short message to check the AhaSend connection.
+     */
+    public function sendTest(string $recipients): ?string
+    {
+        return $this->post(
+            $recipients,
+            'GeenStijl ModBot testmail',
+            view('emails.test')->render(),
+            'Dit is een testmail van GeenStijl ModBot. De e-mailkoppeling (AhaSend) werkt.',
+        );
+    }
+
+    private function post(string $recipients, string $subject, string $html, string $text): ?string
+    {
         $config = config('modbot.email');
-        $recipients = $this->recipients($config['recipients']);
+        $recipients = $this->recipients($recipients);
 
         if ($recipients === []) {
-            throw new RuntimeException('No email recipients configured (AHASEND_RECIPIENTS).');
+            throw new RuntimeException('No email recipients configured.');
+        }
+
+        if (blank($config['api_key']) || blank($config['account_id'])) {
+            throw new RuntimeException('AHASEND_API_KEY or AHASEND_ACCOUNT_ID is not set.');
         }
 
         $response = Http::withToken($config['api_key'])
@@ -27,9 +54,9 @@ class AhaSendMailer
             ->post("https://api.ahasend.com/v2/accounts/{$config['account_id']}/messages", [
                 'from' => ['email' => $config['from_email'], 'name' => $config['from_name']],
                 'recipients' => $recipients,
-                'subject' => 'GeenStijl '.Str::lcfirst($report->title()),
-                'html_content' => view('emails.report', ['report' => $report])->render(),
-                'text_content' => view('emails.report-text', ['report' => $report])->render(),
+                'subject' => $subject,
+                'html_content' => $html,
+                'text_content' => $text,
                 'sandbox' => $config['sandbox'],
             ])
             ->throw()

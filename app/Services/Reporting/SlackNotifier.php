@@ -34,6 +34,10 @@ class SlackNotifier
     {
         $config = config('modbot.slack');
 
+        if (blank($config['bot_token'])) {
+            throw new RuntimeException('SLACK_BOT_TOKEN is not set.');
+        }
+
         $payload = array_filter([
             'channel' => $channel,
             'text' => $text,
