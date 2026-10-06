@@ -100,15 +100,24 @@ class AdminTest extends TestCase
         $this->assertSame(10, config('modbot.report.max_items'));
     }
 
-    public function test_the_default_schedule_is_seeded_and_registered(): void
+    public function test_the_default_schedules_are_seeded_and_only_enabled_ones_registered(): void
     {
-        $schedule = Schedule::sole();
-        $this->assertSame('0 8,20 * * *', $schedule->cron);
+        $report = Schedule::where('name', 'Moderatierapport')->sole();
+        $analyse = Schedule::where('name', 'Analyse (no report)')->sole();
+
+        $this->assertSame('0 8,20 * * *', $report->cron);
+        $this->assertTrue($report->enabled);
+
+        $this->assertSame('*/15 * * * *', $analyse->cron);
+        $this->assertFalse($analyse->enabled);
+        $this->assertFalse($analyse->send_slack);
+        $this->assertFalse($analyse->send_email);
 
         // routes/console.php is loaded before the test database exists; load it again.
         require base_path('routes/console.php');
 
-        $commands = collect(app(\Illuminate\Console\Scheduling\Schedule::class)->events())->pluck('command')->implode("\n");
-        $this->assertStringContainsString("modbot:run --schedule={$schedule->id}", str_replace(["'", '"'], '', $commands));
+        $commands = str_replace(["'", '"'], '', collect(app(\Illuminate\Console\Scheduling\Schedule::class)->events())->pluck('command')->implode("\n"));
+        $this->assertStringContainsString("modbot:run --schedule={$report->id}", $commands);
+        $this->assertStringNotContainsString("modbot:run --schedule={$analyse->id}", $commands);
     }
 }

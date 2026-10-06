@@ -5,6 +5,7 @@ namespace App\Services\Analysis;
 use App\Enums\Category;
 use App\Enums\Priority;
 use App\Models\Article;
+use App\Models\ArticleSummary;
 use App\Models\Comment;
 use App\Models\CommentVerdict;
 use App\Models\ModerationRun;
@@ -23,11 +24,11 @@ class CommentAnalyzer
 
     /**
      * @param  Collection<int, Comment>  $comments  comments not analysed yet
-     * @return array{analyzed: int, failed: int, flagged: int, summaries: array<int, string>}
+     * @return array{analyzed: int, failed: int, flagged: int}
      */
     public function analyze(ModerationRun $run, Collection $comments): array
     {
-        $stats = ['analyzed' => 0, 'failed' => 0, 'flagged' => 0, 'summaries' => []];
+        $stats = ['analyzed' => 0, 'failed' => 0, 'flagged' => 0];
 
         if ($comments->isEmpty()) {
             return $stats;
@@ -65,7 +66,13 @@ class CommentAnalyzer
                 $stats['flagged'] += $flagged;
 
                 if (filled($data['summary'] ?? null)) {
-                    $stats['summaries'][$article->id] = trim(($stats['summaries'][$article->id] ?? '').' '.$data['summary']);
+                    ArticleSummary::create([
+                        'article_id' => $article->id,
+                        'moderation_run_id' => $run->id,
+                        'summary' => trim($data['summary']),
+                        'comments_count' => $chunk->count(),
+                        'created_at' => now(),
+                    ]);
                 }
             }
         }

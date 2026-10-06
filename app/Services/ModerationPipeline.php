@@ -79,7 +79,12 @@ class ModerationPipeline
                 'flagged_count' => $stats['flagged'],
             ]);
 
-            $run->sentiment = $this->summarizer->summarize($run, $stats['summaries'], $this->categoryCounts($run));
+            // Only runs that produce a report need the sentiment; analysis-only
+            // runs (e.g. every 15 minutes) skip this AI call.
+            if ($options->sendSlack || $options->sendEmail || $options->dryRun) {
+                $progress('Summarising the sentiment');
+                $run->sentiment = $this->summarizer->summarize($run, $this->categoryCounts($run));
+            }
 
             $run->fill([
                 'status' => $stats['failed'] > 0 ? 'partial' : 'succeeded',

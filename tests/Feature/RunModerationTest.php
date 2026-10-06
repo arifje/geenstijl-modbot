@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Jobs\RunModerationJob;
+use App\Models\ArticleSummary;
 use App\Models\Comment;
 use App\Models\CommentVerdict;
 use App\Models\ModerationRun;
@@ -233,6 +234,27 @@ class RunModerationTest extends TestCase
         $this->artisan('modbot:run --no-slack --no-email')->assertSuccessful();
 
         $this->assertSame(['c-approved'], Comment::whereNotNull('analyzed_at')->pluck('id')->all());
+    }
+
+    public function test_the_report_describes_the_window_including_earlier_analysis_only_runs(): void
+    {
+        // An analysis-only run (like the 15-minute schedule): no summary call, nothing sent.
+        $this->artisan('modbot:run --no-slack --no-email')->assertSuccessful();
+        $this->assertCount(1, $this->model->calls);
+        $this->assertNull(ModerationRun::sole()->sentiment);
+        $this->assertSame(1, ArticleSummary::count());
+
+        // The report run finds nothing new, but still summarises the window.
+        $this->artisan('modbot:run --no-email')->assertSuccessful();
+
+        $report = ModerationRun::latest('id')->first();
+        $this->assertSame(0, $report->analyzed_count);
+        $this->assertStringContainsString('Felle discussie', $report->sentiment);
+        $this->assertStringContainsString('Veel humor, één bedreiging.', end($this->model->calls)['input']);
+
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'slack.com')
+            && ! isset($r['thread_ts'])
+            && str_contains($r['text'], '🚩 *1* reacties vereisen moderatie'));
     }
 
     private function comment(string $id, string $createdAt, string $content, ?string $parentId = null, bool $approved = false, string $status = 'visible'): array

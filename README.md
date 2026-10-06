@@ -104,7 +104,12 @@ Each shows a clear error with a hint when something is wrong (wrong key, bot not
 
 Go to **Runs → Run now**, switch on **Dry run** and submit. The run starts within a minute and analyses the comments of the last 12 hours without sending anything. Open the run to see the flags and a preview of the Slack message; from there you can still send it to Slack or by email.
 
-Check **Schedules**: the default schedule runs at 08:00 and 20:00 (Europe/Amsterdam). Make sure it is enabled.
+Check **Schedules**. There are two defaults:
+
+- **Moderatierapport**: analyses new comments and sends the report at 08:00 and 20:00 (Europe/Amsterdam). Enabled.
+- **Analyse (no report)**: analyses new comments every 15 minutes without sending anything. Disabled by default.
+
+Moderators approve comments in batches every few hours, and ModBot analyses comments that are *not yet approved*. Enable **Analyse (no report)** to judge comments while they wait for approval; the 08:00/20:00 report then lists everything found in between that is still waiting. Each comment is analysed only once, so this costs about the same as analysing at report time.
 
 ### 11. Optional: log in without passwords
 
@@ -178,7 +183,7 @@ The admin panel at `/admin`:
 - **Dashboard**: flags in the last 24 hours, last and next run, AI cost this month, latest flags.
 - **Runs**: every run with status, trigger (schedule / manual / CLI), counts, tokens and cost. A run's page shows the sentiment, a Slack preview and its flags, and can (re)send the report. **Run now** queues a run (optionally a dry run); a queued run can be cancelled.
 - **Flags**, **Comments**, **Articles**: everything that was synced and analysed, searchable and filterable, with links to the comment on GeenStijl.
-- **Schedules**: cron schedules (window, Slack channel, email on/off). Changes apply within a minute.
+- **Schedules**: cron schedules (window, Slack channel, email on/off). A schedule with Slack and email off only analyses (e.g. every 15 minutes); a report schedule then reports everything in its window. Changes apply within a minute.
 - **Prompts**: edit the moderation and summary prompts. Every save is a new version; older versions can be viewed and reactivated, and each version shows how many runs and flags it produced.
 - **Settings**: Slack channel, email recipients, AI provider and model, filters, login mode, retention. Stored in the database; they override `.env`. Secrets (keys, tokens) stay in `.env`.
 - **Users**: who can log in.
