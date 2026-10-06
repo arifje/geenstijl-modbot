@@ -170,7 +170,12 @@ No port forwarding is needed for ModBot itself. To reach the admin:
 1. **Same network / VPN**: open `http://<server-ip>:<MODBOT_PORT>/admin`.
 2. **SSH tunnel**: `ssh -L 8080:localhost:<MODBOT_PORT> user@server`, then open http://localhost:8080/admin.
 3. **Tailscale**: install it on the server and your laptop (`curl -fsSL https://tailscale.com/install.sh | sh && sudo tailscale up`) and open `http://<tailscale-name>:<MODBOT_PORT>/admin`. No firewall changes needed.
-4. **Port forward** (pfSense: Firewall → NAT → Port Forward): only if you must; restrict the source IP and put HTTPS in front.
+4. **Public HTTPS address without port forwarding** (others only need a browser):
+   - **Tailscale Funnel**: `sudo tailscale funnel --bg <MODBOT_PORT>` gives `https://<server>.<tailnet>.ts.net`.
+   - **Cloudflare Tunnel**: your own domain, e.g. `https://modbot.example.com`, via `cloudflared`.
+
+   Set `APP_URL` to the https address and `MODBOT_PORT=127.0.0.1:<port>`, so the admin is only reachable through the tunnel.
+5. **Port forward** (pfSense: Firewall → NAT → Port Forward): only if you must; restrict the source IP and put HTTPS in front.
 
 The admin is excluded from search engines (`X-Robots-Tag: noindex` on every response) and requires an emailed code on every login.
 

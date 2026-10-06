@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -33,6 +34,12 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Settings::apply();
+
+        // Behind a tunnel or proxy (Tailscale Funnel, Cloudflare Tunnel, ingress)
+        // the app may see plain http; generate https links when APP_URL is https.
+        if (str_starts_with((string) config('app.url'), 'https://')) {
+            URL::forceScheme('https');
+        }
 
         // MAIL_MAILER=ahasend sends Laravel mail (login codes) through the AhaSend API.
         Mail::extend('ahasend', fn () => new AhaSendTransport(app(AhaSendMailer::class)));

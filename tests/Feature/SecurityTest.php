@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Filament\Pages\Auth\Login;
 use App\Models\User;
 use App\Notifications\LoginCode;
+use App\Providers\AppServiceProvider;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -118,5 +119,16 @@ class SecurityTest extends TestCase
 
         $this->artisan('modbot:password-login on')->assertSuccessful();
         $this->assertTrue(config('modbot.auth.password_login'));
+    }
+
+    public function test_links_use_https_when_app_url_is_https(): void
+    {
+        config(['app.url' => 'https://modbot.example.ts.net']);
+        (new AppServiceProvider(app()))->boot();
+
+        $this->get('http://modbot.example.ts.net/admin/login')
+            ->assertOk()
+            ->assertSee('https://modbot.example.ts.net/', false)
+            ->assertDontSee('http://modbot.example.ts.net/', false);
     }
 }
