@@ -8,4 +8,9 @@ use Filament\Resources\Pages\CreateRecord;
 class CreateSchedule extends CreateRecord
 {
     protected static string $resource = ScheduleResource::class;
+
+    protected function mutateFormDataBeforeCreate(array $data): array
+    {
+        return ScheduleResource::withCron($data);
+    }
 }
