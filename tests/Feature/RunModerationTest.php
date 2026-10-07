@@ -181,7 +181,8 @@ class RunModerationTest extends TestCase
         $run = ModerationRun::latest('id')->first();
         $this->assertSame('schedule', $run->trigger);
         $this->assertSame($schedule->id, $run->schedule_id);
-        $this->assertSame(3, (int) round($run->window_start->diffInHours($run->window_end)));
+        $this->assertSame(3, $run->commentWindowHours());
+        $this->assertSame(24, $run->articleWindowHours());
         $this->assertNotNull($schedule->fresh()->last_run_at);
 
         Http::assertSent(fn (Request $r) => str_contains($r->url(), 'slack.com') && $r['channel'] === '#moderatie');
@@ -255,6 +256,29 @@ class RunModerationTest extends TestCase
         Http::assertSent(fn (Request $r) => str_contains($r->url(), 'slack.com')
             && ! isset($r['thread_ts'])
             && str_contains($r['text'], '🚩 *1* reacties vereisen moderatie'));
+    }
+
+    public function test_the_article_window_limits_which_articles_are_checked(): void
+    {
+        // Article 1 was published at 09:00 Amsterdam (07:00 UTC), three hours ago.
+        $this->artisan('modbot:run --article-hours=2 --no-slack --no-email')->assertSuccessful();
+
+        $run = ModerationRun::sole();
+        $this->assertSame(0, $run->comments_count);
+        $this->assertSame('2026-10-05 08:00:00', $run->article_window_start->toDateTimeString());
+        Http::assertNotSent(fn (Request $r) => str_contains($r->url(), '/v3/1/comments'));
+
+        $this->artisan('modbot:run --article-hours=4 --no-slack --no-email')->assertSuccessful();
+        $this->assertSame(2, ModerationRun::latest('id')->first()->analyzed_count);
+    }
+
+    public function test_the_report_states_both_windows(): void
+    {
+        $this->artisan('modbot:run --hours=6 --article-hours=48 --no-email')->assertSuccessful();
+
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'slack.com')
+            && ! isset($r['thread_ts'])
+            && str_contains($r['text'], '_Reacties van de laatste 6 uur op artikelen van de laatste 48 uur_'));
     }
 
     private function comment(string $id, string $createdAt, string $content, ?string $parentId = null, bool $approved = false, string $status = 'visible'): array

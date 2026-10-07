@@ -102,8 +102,8 @@ class Settings extends Page
                             ])
                             ->helperText('Moderators approve in batches every few hours. With "Not yet approved", a comment is analysed while it waits for approval, '
                                 .'and drops out of the report once a moderator approved or removed it. Run the schedule often (e.g. hourly) to catch comments before they are approved.'),
-                        TextInput::make('article_lookback_hours')->label('Article lookback (hours)')->numeric()->minValue(1)->required()
-                            ->helperText('Articles published this long ago are still checked for comments. GeenStijl closes comments after 12 hours.'),
+                        TextInput::make('article_lookback_hours')->label('Default article window (hours)')->numeric()->minValue(1)->required()
+                            ->helperText('Articles published in the last X hours, for the command line and as default for Run now. Schedules have their own. GeenStijl closes comments 12 hours after publication.'),
                     ]),
                 Section::make('Login')
                     ->schema([

@@ -73,9 +73,13 @@ class ScheduleResource extends Resource
                             ->default('Europe/Amsterdam')
                             ->required()
                             ->live(),
+                        TextInput::make('article_window_hours')
+                            ->label('Article window (hours)')
+                            ->helperText('Only articles published in the last X hours. GeenStijl closes comments 12 hours after publication.')
+                            ->numeric()->minValue(1)->maxValue(720)->default(24)->required(),
                         TextInput::make('window_hours')
-                            ->label('Window (hours)')
-                            ->helperText('Comments posted in this many hours before the run are reported. Usually the time between runs.')
+                            ->label('Comment window (hours)')
+                            ->helperText('Only comments posted in the last X hours. Usually the time between report runs.')
                             ->numeric()->minValue(1)->maxValue(168)->default(12)->required(),
                     ]),
                 Section::make('Delivery')
@@ -100,7 +104,8 @@ class ScheduleResource extends Resource
                 TextColumn::make('cron')->fontFamily('mono')->description(fn (Schedule $record) => $record->timezone),
                 TextColumn::make('next_run')->label('Next run')
                     ->state(fn (Schedule $record) => $record->nextRunAt()?->timezone($record->timezone)->format('D d-m H:i') ?? '—'),
-                TextColumn::make('window_hours')->label('Window')->suffix('h'),
+                TextColumn::make('window_hours')->label('Windows')
+                    ->formatStateUsing(fn (Schedule $record) => "articles {$record->article_window_hours}h · comments {$record->window_hours}h"),
                 IconColumn::make('send_slack')->label('Slack')->boolean(),
                 IconColumn::make('send_email')->label('Email')->boolean(),
                 TextColumn::make('last_run_at')->label('Last run')->since()->placeholder('never'),

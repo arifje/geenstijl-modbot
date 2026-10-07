@@ -13,7 +13,8 @@ use Illuminate\Console\Command;
 
 #[Signature('modbot:run
     {--schedule= : Run with the settings of this schedule id}
-    {--hours= : Window in hours (default MODBOT_WINDOW_HOURS)}
+    {--hours= : Comment window: comments posted in the last X hours (default MODBOT_WINDOW_HOURS)}
+    {--article-hours= : Article window: articles published in the last X hours (default: the article window setting)}
     {--dry-run : Print the Slack report instead of sending it}
     {--no-slack : Do not post to Slack}
     {--no-email : Do not send the email report}
@@ -66,6 +67,7 @@ class RunModeration extends Command
 
         return RunOptions::fromArray(array_merge($base, array_filter([
             'windowHours' => $this->option('hours') ? (int) $this->option('hours') : null,
+            'articleWindowHours' => $this->option('article-hours') ? (int) $this->option('article-hours') : null,
             'slackChannel' => $this->option('channel') ?: null,
             'dryRun' => $this->option('dry-run') ?: null,
             'reanalyze' => $this->option('reanalyze') ?: null,

@@ -69,6 +69,7 @@ class AdminTest extends TestCase
 
         Queue::assertPushed(RunModerationJob::class, fn (RunModerationJob $job) => $job->options['windowHours'] === 6
             && $job->options['dryRun'] === true
+            && $job->options['articleWindowHours'] === 24
             && $job->options['trigger'] === 'manual'
             && $job->options['runId'] === $run->id);
     }

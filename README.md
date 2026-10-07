@@ -196,7 +196,7 @@ The admin panel at `/admin`:
 - **Dashboard**: flags in the last 24 hours, last and next run, AI cost this month, latest flags.
 - **Runs**: every run with status, trigger (schedule / manual / CLI), counts, tokens and cost. A run's page shows the sentiment, a Slack preview and its flags, and can (re)send the report. **Run now** queues a run (optionally a dry run); a queued run can be cancelled.
 - **Flags**, **Comments**, **Articles**: everything that was synced and analysed, searchable and filterable, with links to the comment on GeenStijl.
-- **Schedules**: cron schedules (window, Slack channel, email on/off). A schedule with Slack and email off only analyses (e.g. every 15 minutes); a report schedule then reports everything in its window. Changes apply within a minute.
+- **Schedules**: cron schedules with an article window (articles published in the last X hours) and a comment window (comments posted in the last X hours), Slack channel and email on/off. A schedule with Slack and email off only analyses (e.g. every 15 minutes); a report schedule then reports everything in its window. Changes apply within a minute.
 - **Prompts**: edit the moderation and summary prompts. Every save is a new version; older versions can be viewed and reactivated, and each version shows how many runs and flags it produced.
 - **Settings**: Slack channel, email recipients, AI provider and model, filters, login mode, retention. Stored in the database; they override `.env`. Secrets (keys, tokens) stay in `.env`.
 - **Users**: who can log in.
@@ -217,8 +217,9 @@ After adding a key to `.env`, restart: `docker compose --profile app up -d`.
 
 ```
 modbot:run (scheduler, per schedule in the admin; or "Run now")
- ├─ sync      articles published in the last MODBOT_ARTICLE_LOOKBACK_HOURS + their comments → Postgres
- ├─ analyse   approved, visible comments from the window that were not analysed before
+ ├─ sync      articles published in the article window + their comments → Postgres
+ ├─ analyse   comments from the comment window, on articles from the article window,
+ │            matching the approval filter and not analysed before
  │            → one AI request per article (with parent comments as context), structured JSON output
  │            → flags are validated (comment id must exist, quote must appear in the comment) and stored
  ├─ summarise per-article summaries → "Sfeer en sentiment"
@@ -238,8 +239,8 @@ Secrets and defaults are environment variables, see [`.env.example`](.env.exampl
 | `MODBOT_PORT` | `8080` | Port of the admin (Docker Compose) |
 | `MODBOT_LLM_PROVIDER` | `anthropic` | `anthropic`, `openai`, `openai_compatible` |
 | `MODBOT_LLM_EFFORT` | `medium` | `low`, `medium`, `high`, or `default` for models without effort support |
-| `MODBOT_WINDOW_HOURS` | `12` | Default window for runs |
-| `MODBOT_ARTICLE_LOOKBACK_HOURS` | `24` | Articles published in this period are checked. GeenStijl closes comments 12h after publication |
+| `MODBOT_WINDOW_HOURS` | `12` | Default comment window: comments posted in the last X hours |
+| `MODBOT_ARTICLE_LOOKBACK_HOURS` | `24` | Default article window: articles published in the last X hours. GeenStijl closes comments 12h after publication |
 | `MODBOT_APPROVAL_FILTER` | `unapproved` | Which comments to analyse: `unapproved` (waiting for a moderator), `approved` or `all` |
 | `MODBOT_REPORT_CRON` | `0 8,20 * * *` | Only seeds the first schedule |
 | `MODBOT_PASSWORD_LOGIN` | `true` | `false`: log in with only an emailed code |
@@ -273,6 +274,7 @@ The admin runs at http://localhost:8000/admin; `db:seed` creates a local user (s
 php artisan modbot:run --dry-run              # print the Slack report, send nothing
 php artisan modbot:run --no-email             # post to Slack only
 php artisan modbot:run --reanalyze            # analyse the window again (e.g. after a prompt change)
+php artisan modbot:run --article-hours=6 --hours=3   # articles of the last 6h, comments of the last 3h
 php artisan test
 vendor/bin/pint
 ```

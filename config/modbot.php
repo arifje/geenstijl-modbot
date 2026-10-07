@@ -23,14 +23,14 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Window
+    | Windows (defaults; schedules and "Run now" set their own)
     |--------------------------------------------------------------------------
     |
-    | window_hours: comments posted in this window are analysed and reported.
-    | article_lookback_hours: articles published within this period are checked
-    | for new comments. GeenStijl currently closes comments 12 hours after
-    | publication, so 24 hours covers every article that can receive comments
-    | inside a 12-hour window. Raise it if GeenStijl keeps comments open longer.
+    | window_hours: comment window, comments posted in the last X hours.
+    | article_lookback_hours: article window, articles published in the last
+    | X hours. GeenStijl currently closes comments 12 hours after publication,
+    | so 24 hours covers every article that can receive comments inside a
+    | 12-hour comment window.
     |
     */
 

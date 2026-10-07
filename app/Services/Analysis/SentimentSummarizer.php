@@ -23,6 +23,7 @@ class SentimentSummarizer
             // Includes the summaries this run just created (after window_end).
             ->where('created_at', '>=', $run->window_start)
             ->where('created_at', '<=', now())
+            ->when($run->article_window_start, fn ($q, $from) => $q->whereHas('article', fn ($a) => $a->where('published_at', '>=', $from)))
             ->orderBy('id')
             ->get()
             ->groupBy('article_id');

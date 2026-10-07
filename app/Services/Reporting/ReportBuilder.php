@@ -2,7 +2,6 @@
 
 namespace App\Services\Reporting;
 
-use App\Models\Comment;
 use App\Models\CommentVerdict;
 use App\Models\ModerationRun;
 use Illuminate\Support\Collection;
@@ -18,10 +17,11 @@ class ReportBuilder
         $from = $run->window_start;
         $to = $run->window_end;
 
-        $comments = Comment::moderatable($from, $to);
+        $articlesFrom = $run->article_window_start;
+        $comments = $run->moderatableComments();
 
         $items = CommentVerdict::query()
-            ->whereHas('comment', fn ($q) => $q->moderatable($from, $to))
+            ->whereHas('comment', fn ($q) => $q->moderatable($from, $to, $articlesFrom))
             ->with('comment.article')
             ->get()
             ->sortBy([
@@ -40,7 +40,8 @@ class ReportBuilder
             ->values();
 
         return new Report(
-            windowHours: (int) round($from->diffInHours($to)),
+            windowHours: $run->commentWindowHours(),
+            articleWindowHours: $run->articleWindowHours(),
             windowEnd: $to,
             articlesCount: (clone $comments)->distinct()->count('article_id'),
             commentsCount: (clone $comments)->count(),

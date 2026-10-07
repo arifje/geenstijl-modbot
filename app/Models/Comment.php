@@ -42,12 +42,14 @@ class Comment extends Model
     }
 
     /**
-     * Comments that are in scope for moderation: inside the window and
-     * matching the configured status/approval filters.
+     * Comments that are in scope for moderation: inside the comment window,
+     * optionally on articles published since $articlesFrom, and matching the
+     * configured status/approval filters.
      */
-    public function scopeModeratable(Builder $query, Carbon $from, Carbon $to): void
+    public function scopeModeratable(Builder $query, Carbon $from, Carbon $to, ?Carbon $articlesFrom = null): void
     {
         $query->whereBetween('posted_at', [$from, $to])
+            ->when($articlesFrom, fn (Builder $q) => $q->whereHas('article', fn (Builder $a) => $a->where('published_at', '>=', $articlesFrom)))
             ->whereIn('status', config('modbot.statuses'))
             ->when(config('modbot.approval_filter') === 'unapproved', fn (Builder $q) => $q->where('approved', false))
             ->when(config('modbot.approval_filter') === 'approved', fn (Builder $q) => $q->where('approved', true));

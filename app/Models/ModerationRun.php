@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Services\RunOptions;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -18,6 +19,7 @@ class ModerationRun extends Model
             'finished_at' => 'datetime',
             'window_start' => 'datetime',
             'window_end' => 'datetime',
+            'article_window_start' => 'datetime',
             'dry_run' => 'boolean',
         ];
     }
@@ -50,7 +52,27 @@ class ModerationRun extends Model
             'started_at' => $now,
             'window_start' => $now->copy()->subHours($options->windowHours),
             'window_end' => $now,
+            'article_window_start' => $now->copy()->subHours($options->articleHours()),
         ];
+    }
+
+    /**
+     * Comments in scope for this run: posted in the comment window, on an
+     * article published in the article window, matching the filters.
+     */
+    public function moderatableComments(): Builder
+    {
+        return Comment::moderatable($this->window_start, $this->window_end, $this->article_window_start);
+    }
+
+    public function articleWindowHours(): ?int
+    {
+        return $this->article_window_start ? (int) round($this->article_window_start->diffInHours($this->window_end)) : null;
+    }
+
+    public function commentWindowHours(): int
+    {
+        return (int) round($this->window_start->diffInHours($this->window_end));
     }
 
     public function schedule(): BelongsTo

@@ -26,6 +26,7 @@ class RunNowAction
             ->modalDescription('The run is queued and starts within a minute. Analysing new comments costs Claude tokens.')
             ->fillForm(fn (?Schedule $record) => [
                 'windowHours' => ($record ?? $schedule)?->window_hours ?? config('modbot.window_hours'),
+                'articleWindowHours' => ($record ?? $schedule)?->article_window_hours ?? config('modbot.article_lookback_hours'),
                 'sendSlack' => ($record ?? $schedule)?->send_slack ?? true,
                 'sendEmail' => ($record ?? $schedule)?->send_email ?? false,
                 'slackChannel' => ($record ?? $schedule)?->slack_channel ?: config('modbot.slack.channel'),
@@ -33,7 +34,10 @@ class RunNowAction
                 'reanalyze' => false,
             ])
             ->schema([
-                TextInput::make('windowHours')->label('Window (hours)')->numeric()->minValue(1)->maxValue(168)->required(),
+                TextInput::make('articleWindowHours')->label('Article window (hours)')->numeric()->minValue(1)->maxValue(720)->required()
+                    ->helperText('Articles published in the last X hours.'),
+                TextInput::make('windowHours')->label('Comment window (hours)')->numeric()->minValue(1)->maxValue(168)->required()
+                    ->helperText('Comments posted in the last X hours.'),
                 Toggle::make('dryRun')->label('Dry run')->helperText('Analyse and store results, but send nothing. You can send the report from the run page later.')->live(),
                 Toggle::make('sendSlack')->label('Post to Slack')->hidden(fn ($get) => $get('dryRun')),
                 TextInput::make('slackChannel')->label('Slack channel')->hidden(fn ($get) => $get('dryRun') || ! $get('sendSlack')),
@@ -43,6 +47,7 @@ class RunNowAction
             ->action(function (array $data, ?Schedule $record) use ($schedule) {
                 $options = new RunOptions(
                     windowHours: (int) $data['windowHours'],
+                    articleWindowHours: (int) $data['articleWindowHours'],
                     sendSlack: (bool) ($data['sendSlack'] ?? false),
                     sendEmail: (bool) ($data['sendEmail'] ?? false),
                     slackChannel: $data['slackChannel'] ?? null,

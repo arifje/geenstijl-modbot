@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\Comment;
 use App\Models\CommentVerdict;
 use App\Models\ModerationRun;
 use App\Services\Analysis\CommentAnalyzer;
@@ -49,8 +48,7 @@ class ModerationPipeline
         $now = $run->window_end;
 
         try {
-            $lookback = max($windowHours, config('modbot.article_lookback_hours'));
-            $synced = $this->sync->sync($now->copy()->subHours($lookback), $run->window_start);
+            $synced = $this->sync->sync($run->article_window_start, $run->window_start);
             $progress("Synced {$synced['articles']} articles, {$synced['comments']} comments");
 
             // Comments that could not be fetched are not analysed; don't report success.
@@ -66,7 +64,7 @@ class ModerationPipeline
                 $progress($run->error);
             }
 
-            $pending = Comment::moderatable($run->window_start, $run->window_end)
+            $pending = $run->moderatableComments()
                 ->unless($reanalyze, fn ($q) => $q->whereNull('analyzed_at'))
                 ->get();
 
@@ -80,7 +78,7 @@ class ModerationPipeline
                 throw new RuntimeException("Analysis failed for all {$stats['failed']} comments, see the log.");
             }
 
-            $inWindow = Comment::moderatable($run->window_start, $run->window_end);
+            $inWindow = $run->moderatableComments();
 
             $run->fill([
                 'articles_count' => (clone $inWindow)->distinct()->count('article_id'),
@@ -121,7 +119,7 @@ class ModerationPipeline
     private function categoryCounts(ModerationRun $run): array
     {
         return CommentVerdict::query()
-            ->whereHas('comment', fn ($q) => $q->moderatable($run->window_start, $run->window_end))
+            ->whereHas('comment', fn ($q) => $q->moderatable($run->window_start, $run->window_end, $run->article_window_start))
             ->get()
             ->countBy(fn (CommentVerdict $v) => $v->category->label())
             ->all();

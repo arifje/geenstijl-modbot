@@ -17,6 +17,7 @@ class SlackFormatter
     {
         $lines = [
             "*🛡️ {$this->escape($report->title())}*",
+            "_{$report->scope()}_",
             '',
             "💬 *{$report->commentsCount}* reacties beoordeeld van *{$report->articlesCount}* artikelen",
             "🚩 *{$report->items->count()}* reacties vereisen moderatie",

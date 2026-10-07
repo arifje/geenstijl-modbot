@@ -64,8 +64,10 @@ class ModerationRunResource extends Resource
                         TextEntry::make('started_at')
                             ->label(fn (ModerationRun $record) => $record->status === 'queued' ? 'Queued at' : 'Started at')
                             ->dateTime('d-m-Y H:i:s', 'Europe/Amsterdam'),
-                        TextEntry::make('window_start')->label('Window')
+                        TextEntry::make('window_start')->label('Comment window')
                             ->formatStateUsing(fn (ModerationRun $record) => $record->window_start->timezone('Europe/Amsterdam')->format('d-m H:i').' – '.$record->window_end->timezone('Europe/Amsterdam')->format('d-m H:i')),
+                        TextEntry::make('article_window_start')->label('Articles published since')
+                            ->dateTime('d-m H:i', 'Europe/Amsterdam')->placeholder('—'),
                         TextEntry::make('duration')->state(fn (ModerationRun $record) => $record->finished_at ? $record->started_at->diffForHumans($record->finished_at, true) : '—'),
                         TextEntry::make('model')->placeholder('—')
                             ->prefix(fn (ModerationRun $record) => $record->provider ? "{$record->provider} · " : ''),
@@ -113,7 +115,9 @@ class ModerationRunResource extends Resource
                 TextColumn::make('trigger')->badge()->color('gray')
                     ->description(fn (ModerationRun $record) => $record->schedule?->name),
                 IconColumn::make('dry_run')->label('Dry')->boolean()->trueIcon(Heroicon::OutlinedEye)->falseIcon(null),
-                TextColumn::make('window')->state(fn (ModerationRun $record) => round($record->window_start->diffInHours($record->window_end)).'h'),
+                TextColumn::make('window')->label('Windows')
+                    ->state(fn (ModerationRun $record) => ($record->articleWindowHours() !== null ? "A {$record->articleWindowHours()}h · " : '')."C {$record->commentWindowHours()}h")
+                    ->tooltip('A = article window, C = comment window'),
                 TextColumn::make('comments_count')->label('Comments')->numeric(),
                 TextColumn::make('analyzed_count')->label('Analysed')->numeric(),
                 TextColumn::make('flagged_count')->label('Flagged')->numeric()

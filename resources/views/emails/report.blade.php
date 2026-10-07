@@ -8,7 +8,7 @@
     <tr><td style="background:#0f172a;padding:28px 32px;color:#ffffff;">
         <div style="font-size:24px;font-weight:700;line-height:1.25;">GeenStijl Moderatierapport</div>
         <div style="margin-top:8px;font-size:14px;color:#cbd5e1;">
-            Laatste {{ $report->windowHours }} uur · {{ $report->commentsCount }} reacties beoordeeld van {{ $report->articlesCount }} artikelen
+            {{ $report->scope() }} · {{ $report->commentsCount }} reacties beoordeeld van {{ $report->articlesCount }} artikelen
         </div>
     </td></tr>
     <tr><td style="padding:30px 32px;font-size:15px;line-height:1.65;">

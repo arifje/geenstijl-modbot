@@ -1,5 +1,6 @@
 @php($tz = config('modbot.geenstijl.timezone'))
 GeenStijl {!! lcfirst($report->title()) !!}
+{!! $report->scope() !!}
 
 {!! $report->commentsCount !!} reacties beoordeeld van {!! $report->articlesCount !!} artikelen
 {!! $report->items->count() !!} reacties vereisen moderatie

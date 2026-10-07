@@ -14,6 +14,7 @@ final readonly class Report
      */
     public function __construct(
         public int $windowHours,
+        public ?int $articleWindowHours,
         public Carbon $windowEnd,
         public int $articlesCount,
         public int $commentsCount,
@@ -26,6 +27,18 @@ final readonly class Report
     public function title(): string
     {
         return "Moderatierapport reacties — laatste {$this->windowHours} uur";
+    }
+
+    /**
+     * e.g. "Reacties van de laatste 12 uur op artikelen van de laatste 24 uur".
+     */
+    public function scope(): string
+    {
+        $comments = "Reacties van de laatste {$this->windowHours} uur";
+
+        return $this->articleWindowHours === null
+            ? $comments
+            : "{$comments} op artikelen van de laatste {$this->articleWindowHours} uur";
     }
 
     /**
