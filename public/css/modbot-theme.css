@@ -1,0 +1,207 @@
+/*
+ * ModBot theme, in the spirit of geenstijl.nl: GeenStijl pink (#ff33a9) as the
+ * main/accent colour for links and buttons, black (charcoal) and white as
+ * secondary colours, heavy uppercase headings. Loaded after Filament's own
+ * styles (AdminPanelProvider); no build step needed.
+ */
+
+:root {
+    --mb-tint: #ff33a9;
+    --mb-tint-dark: #e01a8e; /* hover */
+    --mb-ink: #2b2b2b;
+    --mb-ink-2: #333333;
+    --mb-ink-3: #3d3d3d;
+    --mb-display: 'Anton', 'Impact', 'Arial Narrow Bold', sans-serif;
+}
+
+/* ---------- Brand ---------- */
+
+.modbot-brand {
+    display: inline-flex;
+    flex-direction: column;
+    line-height: 1;
+}
+
+.modbot-brand-kicker {
+    font-family: var(--mb-display);
+    font-size: 0.6rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--mb-tint);
+}
+
+.modbot-brand-name {
+    font-family: var(--mb-display);
+    font-size: 1.6rem;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: #fff;
+}
+
+/* ---------- Headings ---------- */
+
+.fi-header-heading,
+.fi-simple-header-heading {
+    font-family: var(--mb-display);
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 0.01em;
+}
+
+.fi-header-heading {
+    font-size: 2rem;
+    line-height: 1.1;
+}
+
+/* ---------- Top bar ---------- */
+
+.fi-topbar {
+    background-color: var(--mb-ink);
+    border-bottom: 3px solid var(--mb-tint);
+    box-shadow: none;
+    color: #fff;
+}
+
+.fi-topbar .fi-topbar-open-sidebar-btn,
+.fi-topbar .fi-topbar-close-sidebar-btn {
+    color: #e5e5e5;
+}
+
+.fi-topbar .fi-global-search-field .fi-input-wrp {
+    background-color: var(--mb-ink-3);
+    --tw-ring-color: transparent;
+    border-color: transparent;
+}
+
+.fi-topbar .fi-global-search-field input {
+    color: #fff;
+}
+
+.fi-topbar .fi-global-search-field input::placeholder,
+.fi-topbar .fi-global-search-field .fi-icon {
+    color: #a3a3a3;
+}
+
+.fi-topbar .fi-user-avatar {
+    box-shadow: 0 0 0 2px var(--mb-tint);
+}
+
+/* ---------- Sidebar ---------- */
+
+.fi-sidebar.fi-main-sidebar {
+    background-color: var(--mb-ink-2);
+}
+
+.fi-sidebar .fi-sidebar-header {
+    background-color: var(--mb-ink);
+    border-bottom: 3px solid var(--mb-tint);
+    box-shadow: none;
+}
+
+.fi-sidebar .fi-sidebar-group-label {
+    font-family: var(--mb-display);
+    font-weight: 400;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #9a9a9a;
+}
+
+.fi-sidebar .fi-sidebar-group-btn .fi-icon {
+    color: #8a8a8a;
+}
+
+.fi-sidebar .fi-sidebar-item-btn {
+    color: #e5e5e5;
+}
+
+.fi-sidebar .fi-sidebar-item-btn .fi-icon {
+    color: #a3a3a3;
+}
+
+.fi-sidebar .fi-sidebar-item-label {
+    color: inherit;
+}
+
+.fi-sidebar .fi-sidebar-item-btn:hover,
+.fi-sidebar .fi-sidebar-item-btn:focus-visible {
+    background-color: rgba(255, 255, 255, 0.07);
+}
+
+.fi-sidebar .fi-sidebar-item.fi-active > .fi-sidebar-item-btn {
+    background-color: var(--mb-tint);
+    color: #fff;
+}
+
+.fi-sidebar .fi-sidebar-item.fi-active > .fi-sidebar-item-btn .fi-icon,
+.fi-sidebar .fi-sidebar-item.fi-active > .fi-sidebar-item-btn .fi-sidebar-item-label {
+    color: #fff;
+}
+
+/* ---------- Content ---------- */
+
+.fi-body:not(.dark .fi-body) {
+    background-color: #f1f2f4;
+}
+
+/* Short pink bar under the page heading. */
+.fi-header-heading::after {
+    content: '';
+    display: block;
+    width: 3rem;
+    height: 4px;
+    margin-top: 0.5rem;
+    border-radius: 2px;
+    background-color: var(--mb-tint);
+}
+
+/* ---------- Login and other simple pages ---------- */
+
+.fi-simple-layout {
+    background-color: var(--mb-ink);
+    background-image:
+        radial-gradient(60rem 30rem at 85% -10%, rgba(255, 51, 169, 0.35), transparent 60%),
+        radial-gradient(40rem 25rem at -10% 110%, rgba(255, 255, 255, 0.06), transparent 60%),
+        repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.025) 0 2px, transparent 2px 14px);
+}
+
+.fi-simple-main {
+    border-top: 5px solid var(--mb-tint);
+    border-radius: 0.9rem;
+    box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.6);
+}
+
+.fi-simple-header .modbot-brand {
+    align-items: center;
+}
+
+/* On the white login card the brand name is dark. */
+.fi-simple-header .modbot-brand-name {
+    color: var(--mb-ink);
+    font-size: 2.2rem;
+}
+
+.dark .fi-simple-header .modbot-brand-name {
+    color: #fff;
+}
+
+.fi-simple-header-heading {
+    font-size: 1.6rem;
+}
+
+/* ---------- Buttons ---------- */
+
+/* Buttons in GeenStijl pink with white text, as on geenstijl.nl. Note: white
+   on #ff33a9 is 3.3:1, below the 4.5:1 WCAG AA asks for small text. */
+.fi-btn.fi-color-primary:not(.fi-outlined):not(.fi-link) {
+    background-color: var(--mb-tint);
+    color: #fff;
+}
+
+.fi-btn.fi-color-primary:not(.fi-outlined):not(.fi-link) .fi-icon {
+    color: #fff;
+}
+
+.fi-btn.fi-color-primary:not(.fi-outlined):not(.fi-link):hover,
+.fi-btn.fi-color-primary:not(.fi-outlined):not(.fi-link):focus-visible {
+    background-color: var(--mb-tint-dark);
+}

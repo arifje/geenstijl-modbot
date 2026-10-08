@@ -24,6 +24,15 @@ use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 class AdminPanelProvider extends PanelProvider
 {
+    private static function themeTags(): string
+    {
+        $version = @filemtime(public_path('css/modbot-theme.css')) ?: 1;
+
+        return '<link rel="preconnect" href="https://fonts.bunny.net">'
+            .'<link rel="stylesheet" href="https://fonts.bunny.net/css?family=anton:400&display=swap">'
+            .'<link rel="stylesheet" href="'.e(asset('css/modbot-theme.css')).'?v='.$version.'">';
+    }
+
     public function panel(Panel $panel): Panel
     {
         return $panel
@@ -40,9 +49,16 @@ class AdminPanelProvider extends PanelProvider
             // Keep the admin out of search engines (see also the NoIndex middleware).
             ->renderHook(PanelsRenderHook::HEAD_START, fn () => '<meta name="robots" content="noindex, nofollow">')
             ->brandName('ModBot')
+            ->brandLogo(fn () => view('filament.brand'))
+            ->brandLogoHeight('2.4rem')
+            ->favicon(asset('favicon.svg'))
             ->colors([
-                'primary' => Color::Red,
+                // GeenStijl pink; black and white are the secondary colours.
+                'primary' => Color::hex('#ff33a9'),
+                'gray' => Color::Zinc,
             ])
+            // GeenStijl-style theme on top of Filament (public/css/modbot-theme.css).
+            ->renderHook(PanelsRenderHook::HEAD_END, fn () => self::themeTags())
             ->navigationGroups(['Moderation', 'Configuration', 'System'])
             // Use the full width, so content starts at the left instead of centred.
             ->maxContentWidth(Width::Full)
