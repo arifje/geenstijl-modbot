@@ -82,21 +82,9 @@ return [
         // Comments per request. Comments are grouped per article; larger
         // articles are split into chunks of this size.
         'batch_size' => (int) env('MODBOT_LLM_BATCH_SIZE', 400),
-        // USD per million tokens [input, output], for cost estimates in the
-        // admin. Models without a price show no cost.
-        'prices' => [
-            'claude-fable-5-1' => [10.0, 50.0],
-            'claude-fable-5' => [10.0, 50.0],
-            'claude-opus-5-5' => [4.0, 20.0],
-            'claude-opus-5' => [5.0, 25.0],
-            'claude-opus-4-8' => [5.0, 25.0],
-            'claude-opus-4-7' => [5.0, 25.0],
-            'claude-opus-4-6' => [5.0, 25.0],
-            'claude-sonnet-5-5' => [2.0, 10.0],
-            'claude-sonnet-5' => [2.0, 10.0],
-            'claude-sonnet-4-6' => [3.0, 15.0],
-            'claude-haiku-4-5' => [1.0, 5.0],
-        ],
+        // Built-in prices: config/llm_prices.php. Prices added under
+        // Settings → AI provider → Model prices (stored here) override them.
+        'price_overrides' => [],
     ],
 
     /*

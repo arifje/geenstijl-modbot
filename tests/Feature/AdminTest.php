@@ -6,6 +6,7 @@ use App\Filament\Resources\ModerationRuns\Pages\ListModerationRuns;
 use App\Jobs\RunModerationJob;
 use App\Models\ModerationRun;
 use App\Models\Schedule;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\ModerationRunner;
 use App\Services\RunOptions;
@@ -44,6 +45,10 @@ class AdminTest extends TestCase
         }
 
         $this->assertSame(6.0, $run->estimatedCost());
+
+        // A run on a model without a price says so instead of showing nothing.
+        $run->update(['model' => 'some-new-model']);
+        $this->get('/admin/runs')->assertSee('no price');
     }
 
     public function test_guests_are_redirected_to_login(): void
@@ -120,5 +125,21 @@ class AdminTest extends TestCase
         $commands = str_replace(["'", '"'], '', collect(app(\Illuminate\Console\Scheduling\Schedule::class)->events())->pluck('command')->implode("\n"));
         $this->assertStringContainsString("modbot:run --schedule={$report->id}", $commands);
         $this->assertStringNotContainsString("modbot:run --schedule={$analyse->id}", $commands);
+    }
+
+    public function test_model_prices_can_be_added_in_settings(): void
+    {
+        Livewire::test(\App\Filament\Pages\Settings::class)
+            ->set('data.llm_price_overrides', ['a' => ['model' => 'my-local-model', 'input' => '0.25', 'output' => '2']])
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertEquals([['model' => 'my-local-model', 'input' => 0.25, 'output' => 2]], Setting::find('llm_price_overrides')->value);
+
+        $run = ModerationRun::create([
+            'status' => 'succeeded', 'started_at' => now(), 'window_start' => now()->subHours(12), 'window_end' => now(),
+            'model' => 'my-local-model', 'input_tokens' => 1_000_000, 'output_tokens' => 1_000_000,
+        ]);
+        $this->assertSame(2.25, $run->estimatedCost());
     }
 }

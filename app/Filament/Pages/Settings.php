@@ -9,6 +9,7 @@ use App\Services\Reporting\SlackNotifier;
 use App\Support\Settings as SettingsStore;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -90,6 +91,22 @@ class Settings extends Page
                             ->placeholder('https://generativelanguage.googleapis.com/v1beta/openai')
                             ->helperText('Gemini: https://generativelanguage.googleapis.com/v1beta/openai · Mistral: https://api.mistral.ai/v1 · Groq: https://api.groq.com/openai/v1 · Ollama: http://<host>:11434/v1'),
                         $this->modelSelect('compatible_model', 'openai_compatible', 'Model', 'LLM_COMPATIBLE_API_KEY'),
+
+                        Repeater::make('llm_price_overrides')
+                            ->label('Model prices')
+                            ->helperText(fn () => 'USD per million tokens, for the cost estimates. '
+                                .count(config('llm_prices.models')).' Claude, OpenAI and Gemini models are built in (config/llm_prices.php). '
+                                .'Add models that are missing, or override a built-in price, here.')
+                            ->schema([
+                                TextInput::make('model')->label('Model id')->required()->placeholder('e.g. gpt-5-mini'),
+                                TextInput::make('input')->label('Input $ / M tokens')->numeric()->minValue(0)->required(),
+                                TextInput::make('output')->label('Output $ / M tokens')->numeric()->minValue(0)->required(),
+                            ])
+                            ->columns(3)
+                            ->defaultItems(0)
+                            ->addActionLabel('Add model price')
+                            ->reorderable(false)
+                            ->columnSpanFull(),
                     ]),
                 Section::make('Comments')
                     ->columns(2)
@@ -346,6 +363,8 @@ class Settings extends Page
     public function save(): void
     {
         $data = $this->form->getState();
+
+        $data['llm_price_overrides'] = array_values($data['llm_price_overrides'] ?? []);
 
         foreach (['article_lookback_hours', 'report_max_items', 'retention_days', 'log_retention_days'] as $key) {
             $data[$key] = (int) $data[$key];

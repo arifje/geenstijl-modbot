@@ -123,7 +123,10 @@ class ModerationRunResource extends Resource
                 TextColumn::make('flagged_count')->label('Flagged')->numeric()
                     ->color(fn (int $state) => $state > 0 ? 'warning' : null),
                 TextColumn::make('cost')->state(fn (ModerationRun $record) => self::formatCost($record))
-                    ->description(fn (ModerationRun $record) => $record->model),
+                    ->description(fn (ModerationRun $record) => $record->model)
+                    ->tooltip(fn (ModerationRun $record) => self::formatCost($record) === 'no price'
+                        ? "No price known for {$record->model}. Add it under Settings → AI provider → Model prices."
+                        : null),
                 IconColumn::make('slack_ts')->label('Slack')->boolean()->state(fn (ModerationRun $record) => filled($record->slack_ts)),
                 IconColumn::make('email_message_id')->label('Email')->boolean()->state(fn (ModerationRun $record) => filled($record->email_message_id)),
             ])
@@ -143,9 +146,13 @@ class ModerationRunResource extends Resource
 
     public static function formatCost(ModerationRun $record): string
     {
+        if ($record->input_tokens + $record->output_tokens === 0) {
+            return '—';
+        }
+
         $cost = $record->estimatedCost();
 
-        return $cost === null ? '—' : '≈ $'.number_format($cost, 2);
+        return $cost === null ? 'no price' : '≈ $'.number_format($cost, 2);
     }
 
     public static function slackPreview(ModerationRun $record): string

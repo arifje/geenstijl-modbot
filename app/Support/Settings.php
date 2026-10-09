@@ -25,6 +25,7 @@ class Settings
         'compatible_model' => 'modbot.llm.providers.openai_compatible.model',
         'compatible_base_url' => 'modbot.llm.providers.openai_compatible.base_url',
         'llm_effort' => 'modbot.llm.effort',
+        'llm_price_overrides' => 'modbot.llm.price_overrides',
         'report_max_items' => 'modbot.report.max_items',
         'retention_days' => 'modbot.retention_days',
         'log_retention_days' => 'modbot.log_retention_days',

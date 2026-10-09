@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Services\RunOptions;
+use App\Support\ModelPrices;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -86,12 +87,13 @@ class ModerationRun extends Model
     }
 
     /**
-     * Approximate cost in USD, from the token counts and the price table in
-     * config/modbot.php. Cached input tokens are counted at the full rate.
+     * Approximate cost in USD, from the token counts and the model's price
+     * (App\Support\ModelPrices). Cached input tokens are counted at the full
+     * rate. Null when the model has no price.
      */
     public function estimatedCost(): ?float
     {
-        $prices = config("modbot.llm.prices.{$this->model}");
+        $prices = ModelPrices::for($this->model);
 
         if ($prices === null) {
             return null;
