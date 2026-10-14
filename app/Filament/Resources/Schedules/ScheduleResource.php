@@ -26,6 +26,7 @@ use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ToggleColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Arr;
 use Illuminate\Validation\ValidationException;
 use UnitEnum;
@@ -151,6 +152,26 @@ class ScheduleResource extends Resource
     }
 
     /**
+     * Sorts by a value computed in PHP (from the cron expression). There are
+     * only a few schedules, so the order is computed for all of them and
+     * passed to the query as a CASE on the id.
+     *
+     * @param  \Closure(Schedule): array<int, mixed>  $key
+     */
+    private static function orderByComputed(Builder $query, string $direction, \Closure $key): Builder
+    {
+        $ordered = Schedule::all()->sortBy(fn (Schedule $s) => $key($s))->pluck('id')->values();
+
+        if ($ordered->isEmpty()) {
+            return $query;
+        }
+
+        $cases = $ordered->map(fn (int $id, int $position) => "WHEN {$id} THEN {$position}")->implode(' ');
+
+        return $query->orderByRaw("CASE id {$cases} ELSE {$ordered->count()} END ".($direction === 'desc' ? 'desc' : 'asc'));
+    }
+
+    /**
      * Values for the fields that don't apply to a schedule's frequency (the
      * same as the field defaults), so switching "How often?" while editing
      * starts from sensible values.
@@ -217,19 +238,31 @@ class ScheduleResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->defaultSort('cron')
             ->columns([
-                TextColumn::make('name')->searchable(),
+                TextColumn::make('name')->searchable()->sortable(),
                 TextColumn::make('cron')->label('When')
                     ->formatStateUsing(fn (string $state) => ScheduleFrequency::describe($state))
-                    ->description(fn (Schedule $record) => $record->timezone === 'Europe/Amsterdam' ? null : $record->timezone),
+                    ->description(fn (Schedule $record) => $record->timezone === 'Europe/Amsterdam' ? null : $record->timezone)
+                    // By time of day: 08:00 before 11:00, every 15 minutes first.
+                    ->sortable(query: fn (Builder $query, string $direction) => self::orderByComputed(
+                        $query, $direction, fn (Schedule $s) => [ScheduleFrequency::firstMinuteOfDay($s->cron), $s->name],
+                    )),
                 TextColumn::make('next_run')->label('Next run')
-                    ->state(fn (Schedule $record) => $record->nextRunAt()?->timezone($record->timezone)->format('D d-m H:i') ?? '—'),
+                    ->state(fn (Schedule $record) => $record->nextRunAt()?->timezone($record->timezone)->format('D d-m H:i') ?? '—')
+                    // Disabled schedules (no next run) last.
+                    ->sortable(query: fn (Builder $query, string $direction) => self::orderByComputed(
+                        $query, $direction, fn (Schedule $s) => [$s->nextRunAt()?->getTimestamp() ?? PHP_INT_MAX, $s->name],
+                    )),
                 TextColumn::make('window_hours')->label('Windows')
-                    ->formatStateUsing(fn (Schedule $record) => "articles {$record->article_window_hours}h · comments {$record->window_hours}h"),
-                IconColumn::make('send_slack')->label('Slack')->boolean(),
-                IconColumn::make('send_email')->label('Email')->boolean(),
-                TextColumn::make('last_run_at')->label('Last run')->since()->placeholder('never'),
-                ToggleColumn::make('enabled'),
+                    ->formatStateUsing(fn (Schedule $record) => "articles {$record->article_window_hours}h · comments {$record->window_hours}h")
+                    ->sortable(query: fn (Builder $query, string $direction) => $query
+                        ->orderBy('article_window_hours', $direction)
+                        ->orderBy('window_hours', $direction)),
+                IconColumn::make('send_slack')->label('Slack')->boolean()->sortable(),
+                IconColumn::make('send_email')->label('Email')->boolean()->sortable(),
+                TextColumn::make('last_run_at')->label('Last run')->since()->placeholder('never')->sortable(),
+                ToggleColumn::make('enabled')->sortable(),
             ])
             ->recordActions([
                 RunNowAction::make(),

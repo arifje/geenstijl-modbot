@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use Cron\CronExpression;
+
 /**
  * Translates between the schedule form ("every 15 minutes", "daily at 08:00
  * and 20:00", ...) and the cron expression the scheduler stores and runs.
@@ -105,6 +107,22 @@ class ScheduleFrequency
             'weekly' => self::describeDays($data['days']).' at '.self::list($data['times']),
             default => "Custom: {$data['cron']}",
         };
+    }
+
+    /**
+     * Minutes after midnight of the first run on a day, for sorting schedules
+     * by time of day (every 15 minutes = 0, daily at 08:00 = 480).
+     */
+    public static function firstMinuteOfDay(string $cron): int
+    {
+        if (! CronExpression::isValidExpression($cron)) {
+            return PHP_INT_MAX;
+        }
+
+        // From a Monday at midnight: the first run that week, at its time of day.
+        $next = (new CronExpression($cron))->getNextRunDate(new \DateTimeImmutable('2026-01-05 00:00:00'), 0, true);
+
+        return (int) $next->format('G') * 60 + (int) $next->format('i');
     }
 
     /**
