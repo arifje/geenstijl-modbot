@@ -55,7 +55,8 @@ return [
         'provider' => env('MODBOT_LLM_PROVIDER', 'anthropic'),
         // low, medium, high, or "default" to let the provider/model decide.
         'effort' => env('MODBOT_LLM_EFFORT', 'medium'),
-        'max_tokens' => (int) env('MODBOT_LLM_MAX_TOKENS', 16000),
+        // Max length of one answer (thinking + JSON). Also under Settings.
+        'max_tokens' => (int) env('MODBOT_LLM_MAX_TOKENS', 32000),
         'timeout' => (int) env('MODBOT_LLM_TIMEOUT', 600),
 
         // API keys stay in the environment; models and the base URL can be

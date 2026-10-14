@@ -198,7 +198,7 @@ The admin panel at `/admin`:
 - **Flags**, **Comments**, **Articles**: everything that was synced and analysed, searchable and filterable, with links to the comment on GeenStijl.
 - **Schedules**: when to run, chosen in plain terms (every few minutes, every few hours, every day at set times, or on certain days; a cron expression under "Advanced" for anything else), with an article window (articles published in the last X hours) and a comment window (comments posted in the last X hours), Slack channel and email on/off. A schedule with Slack and email off only analyses (e.g. every 15 minutes); a report schedule then reports everything in its window. Changes apply within a minute.
 - **Prompts**: edit the moderation and summary prompts. Every save is a new version; older versions can be viewed and reactivated, and each version shows how many runs and flags it produced.
-- **Settings**: Slack channel, email recipients, AI provider and model, filters, login mode, retention. Stored in the database; they override `.env`. Secrets (keys, tokens) stay in `.env`.
+- **Settings**: Slack channel, email recipients, AI provider, model, API key (stored encrypted; replaces the key from `.env`), max output tokens, comments per request, model prices, filters, login mode, retention. Stored in the database; they override `.env`. Each provider has a link to its API key page.
 - **Users**: who can log in.
 
 ## AI providers
@@ -238,6 +238,8 @@ Secrets and defaults are environment variables, see [`.env.example`](.env.exampl
 |---|---|---|
 | `MODBOT_PORT` | `8080` | Port of the admin (Docker Compose) |
 | `MODBOT_LLM_PROVIDER` | `anthropic` | `anthropic`, `openai`, `openai_compatible` |
+| `MODBOT_LLM_MAX_TOKENS` | `32000` | Max length of one AI answer; when hit, the batch is split in two and retried |
+| `MODBOT_LLM_BATCH_SIZE` | `400` | Comments per AI request |
 | `MODBOT_LLM_EFFORT` | `medium` | `low`, `medium`, `high`, or `default` for models without effort support |
 | `MODBOT_WINDOW_HOURS` | `12` | Default comment window: comments posted in the last X hours |
 | `MODBOT_ARTICLE_LOOKBACK_HOURS` | `24` | Default article window: articles published in the last X hours. GeenStijl closes comments 12h after publication |

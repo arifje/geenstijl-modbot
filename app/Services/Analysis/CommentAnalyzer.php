@@ -20,6 +20,9 @@ use Illuminate\Support\Str;
  */
 class CommentAnalyzer
 {
+    /** Batches are not split below this many comments. */
+    private const MIN_BATCH = 10;
+
     public function __construct(private PromptRepository $prompts) {}
 
     /**
@@ -45,39 +48,67 @@ class CommentAnalyzer
             /** @var Article $article */
             $article = $articleComments->first()->article;
 
-            foreach ($articleComments->sortBy('posted_at')->chunk(config('modbot.llm.batch_size')) as $chunk) {
-                try {
-                    $result = $model->complete($system, $this->buildInput($article, $chunk), $this->schema());
-                    $data = $this->validated($result->json());
-                } catch (\Throwable $e) {
-                    Log::error('Analysing comments failed', ['article' => $article->id, 'error' => $e->getMessage()]);
-                    $stats['failed'] += $chunk->count();
-
-                    continue;
-                }
-
-                $flagged = $this->store($run, $chunk, $data['flags'] ?? [], $result->model);
-
-                $run->increment('input_tokens', $result->inputTokens);
-                $run->increment('output_tokens', $result->outputTokens);
-                $run->model = $result->model;
-
-                $stats['analyzed'] += $chunk->count();
-                $stats['flagged'] += $flagged;
-
-                if (filled($data['summary'] ?? null)) {
-                    ArticleSummary::create([
-                        'article_id' => $article->id,
-                        'moderation_run_id' => $run->id,
-                        'summary' => trim($data['summary']),
-                        'comments_count' => $chunk->count(),
-                        'created_at' => now(),
-                    ]);
-                }
+            foreach ($articleComments->sortBy('posted_at')->chunk(max(1, (int) config('modbot.llm.batch_size'))) as $chunk) {
+                $this->analyzeBatch($run, $article, $chunk->values(), $model, $system, $stats);
             }
         }
 
         return $stats;
+    }
+
+    /**
+     * Analyses one batch of comments of an article. When the answer does not
+     * fit in the max output tokens, the batch is split in two and each half is
+     * analysed on its own, down to MIN_BATCH comments.
+     *
+     * @param  Collection<int, Comment>  $batch
+     * @param  array{analyzed: int, failed: int, flagged: int}  $stats
+     */
+    private function analyzeBatch(ModerationRun $run, Article $article, Collection $batch, LanguageModel $model, string $system, array &$stats): void
+    {
+        try {
+            $result = $model->complete($system, $this->buildInput($article, $batch), $this->schema());
+            $data = $this->validated($result->json());
+        } catch (LlmOutputTooLong $e) {
+            if ($batch->count() >= 2 * self::MIN_BATCH) {
+                Log::info("Answer for {$batch->count()} comments of article {$article->id} hit the max output tokens; splitting the batch in two", ['category' => 'run']);
+
+                foreach ($batch->split(2) as $half) {
+                    $this->analyzeBatch($run, $article, $half->values(), $model, $system, $stats);
+                }
+
+                return;
+            }
+
+            Log::error('Analysing comments failed', ['article' => $article->id, 'error' => $e->getMessage().'. Raise "Max output tokens" under Settings.']);
+            $stats['failed'] += $batch->count();
+
+            return;
+        } catch (\Throwable $e) {
+            Log::error('Analysing comments failed', ['article' => $article->id, 'error' => $e->getMessage()]);
+            $stats['failed'] += $batch->count();
+
+            return;
+        }
+
+        $flagged = $this->store($run, $batch, $data['flags'] ?? [], $result->model);
+
+        $run->increment('input_tokens', $result->inputTokens);
+        $run->increment('output_tokens', $result->outputTokens);
+        $run->model = $result->model;
+
+        $stats['analyzed'] += $batch->count();
+        $stats['flagged'] += $flagged;
+
+        if (filled($data['summary'] ?? null)) {
+            ArticleSummary::create([
+                'article_id' => $article->id,
+                'moderation_run_id' => $run->id,
+                'summary' => trim($data['summary']),
+                'comments_count' => $batch->count(),
+                'created_at' => now(),
+            ]);
+        }
     }
 
     /**

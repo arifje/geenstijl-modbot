@@ -63,7 +63,7 @@ class OpenAiCompatibleLanguageModel implements LanguageModel
         $choice = $response['choices'][0] ?? null;
 
         if (($choice['finish_reason'] ?? null) === 'length') {
-            throw new LlmException('Model output hit max_tokens');
+            throw new LlmOutputTooLong("Model output hit max_tokens ({$this->maxTokens})");
         }
 
         if (filled($choice['message']['refusal'] ?? null)) {

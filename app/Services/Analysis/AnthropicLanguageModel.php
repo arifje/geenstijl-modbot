@@ -4,6 +4,7 @@ namespace App\Services\Analysis;
 
 use Anthropic\Client;
 use Anthropic\Core\Exceptions\AnthropicException;
+use Anthropic\Lib\Streaming\MessageAccumulator;
 
 class AnthropicLanguageModel implements LanguageModel
 {
@@ -23,7 +24,9 @@ class AnthropicLanguageModel implements LanguageModel
         }
 
         try {
-            $message = $this->client->beta->messages->create(
+            // Streamed: the SDK needs streaming for large max_tokens values, to
+            // stay clear of HTTP timeouts. The accumulator builds the final message.
+            $stream = $this->client->beta->messages->createStream(
                 model: $this->model,
                 maxTokens: $this->maxTokens,
                 system: [
@@ -37,6 +40,12 @@ class AnthropicLanguageModel implements LanguageModel
                 fallbacks: 'default',
                 betas: ['server-side-fallback-2026-07-01'],
             );
+
+            $accumulator = MessageAccumulator::forBetaMessages();
+            foreach ($stream as $event) {
+                $accumulator->accumulate($event);
+            }
+            $message = $accumulator->message();
         } catch (AnthropicException $e) {
             throw new LlmException('Anthropic API error: '.$e->getMessage(), previous: $e);
         }
@@ -46,7 +55,7 @@ class AnthropicLanguageModel implements LanguageModel
         }
 
         if ($message->stopReason === 'max_tokens') {
-            throw new LlmException('Model output hit max_tokens');
+            throw new LlmOutputTooLong("Model output hit max_tokens ({$this->maxTokens})");
         }
 
         $text = '';

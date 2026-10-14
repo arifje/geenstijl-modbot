@@ -60,7 +60,11 @@ class OpenAiLanguageModel implements LanguageModel
         }
 
         if (($response['status'] ?? null) === 'incomplete') {
-            throw new LlmException('OpenAI response incomplete: '.($response['incomplete_details']['reason'] ?? 'unknown'));
+            $reason = $response['incomplete_details']['reason'] ?? 'unknown';
+
+            throw $reason === 'max_output_tokens'
+                ? new LlmOutputTooLong("Model output hit max_tokens ({$this->maxTokens})")
+                : new LlmException("OpenAI response incomplete: {$reason}");
         }
 
         $text = '';

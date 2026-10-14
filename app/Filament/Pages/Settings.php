@@ -71,7 +71,7 @@ class Settings extends Page
                     ]),
                 Section::make('AI provider')
                     ->afterHeader([$this->testAiAction()])
-                    ->description('API keys come from the environment. Each provider keeps its own model, so switching back and forth is one click.')
+                    ->description('Each provider keeps its own model and API key, so switching back and forth is one click.')
                     ->columns(2)
                     ->schema([
                         Select::make('llm_provider')->label('Provider')->required()->live()
@@ -81,7 +81,9 @@ class Settings extends Page
                             ->helperText('How long the model thinks. Use "Model default" for models without reasoning/effort support.'),
 
                         $this->modelSelect('llm_model', 'anthropic', 'Claude model', 'ANTHROPIC_API_KEY'),
+                        $this->keyField('anthropic_api_key', 'anthropic', 'ANTHROPIC_API_KEY'),
                         $this->modelSelect('openai_model', 'openai', 'OpenAI model', 'OPENAI_API_KEY'),
+                        $this->keyField('openai_api_key', 'openai', 'OPENAI_API_KEY'),
 
                         TextInput::make('compatible_base_url')->label('Base URL')
                             ->visible(fn ($get) => $get('llm_provider') === 'openai_compatible')
@@ -91,6 +93,14 @@ class Settings extends Page
                             ->placeholder('https://generativelanguage.googleapis.com/v1beta/openai')
                             ->helperText('Gemini: https://generativelanguage.googleapis.com/v1beta/openai · Mistral: https://api.mistral.ai/v1 · Groq: https://api.groq.com/openai/v1 · Ollama: http://<host>:11434/v1'),
                         $this->modelSelect('compatible_model', 'openai_compatible', 'Model', 'LLM_COMPATIBLE_API_KEY'),
+                        $this->keyField('compatible_api_key', 'openai_compatible', 'LLM_COMPATIBLE_API_KEY'),
+
+                        TextInput::make('llm_max_tokens')->label('Max output tokens')
+                            ->numeric()->minValue(1000)->maxValue(128000)->required()
+                            ->helperText('Max length of one answer, thinking included. When an answer hits it, ModBot splits the comments into smaller batches and tries again.'),
+                        TextInput::make('llm_batch_size')->label('Comments per request')
+                            ->numeric()->minValue(10)->maxValue(1000)->required()
+                            ->helperText('Comments of one article sent in one request. Smaller batches give shorter answers and more requests.'),
 
                         Repeater::make('llm_price_overrides')
                             ->label('Model prices')
@@ -189,6 +199,12 @@ class Settings extends Page
                     config([SettingsStore::KEYS[$key] => $value]);
                 }
 
+                foreach (array_intersect_key($current, SettingsStore::SECRETS) as $key => $value) {
+                    if (filled($value)) {
+                        config([SettingsStore::SECRETS[$key] => trim($value)]);
+                    }
+                }
+
                 $started = microtime(true);
 
                 try {
@@ -228,10 +244,10 @@ class Settings extends Page
             ->required(fn ($get) => $get('llm_provider') === $provider)
             ->searchable()
             ->options(fn ($get, ?string $state) => $this->modelList($provider, $get('compatible_base_url'), $state)['options'])
-            ->helperText(function ($get, ?string $state) use ($provider, $env) {
+            ->helperText(function ($get, ?string $state) use ($provider) {
                 $error = $this->modelList($provider, $get('compatible_base_url'), $state)['error'];
 
-                return trim($this->keyStatus($provider, $env).' '.($error ? "Model list unavailable: {$error}" : 'Models are refreshed every 15 minutes.')
+                return trim(($error ? "Model list unavailable: {$error}" : 'Models are refreshed every 15 minutes.')
                     .($provider === 'openai_compatible' ? ' The model must support JSON schema output.' : ''));
             })
             ->suffixAction(
@@ -270,11 +286,77 @@ class Settings extends Page
         return $list;
     }
 
-    private function keyStatus(string $provider, string $env): string
+    /** Where to create an API key, per provider. */
+    private const KEY_PAGES = [
+        'anthropic' => 'https://platform.claude.com/settings/keys',
+        'openai' => 'https://platform.openai.com/api-keys',
+        'generativelanguage.googleapis.com' => 'https://aistudio.google.com/apikey',
+        'api.mistral.ai' => 'https://console.mistral.ai/api-keys',
+        'api.groq.com' => 'https://console.groq.com/keys',
+    ];
+
+    /**
+     * API key field: a key typed here is stored encrypted and replaces the
+     * .env key; the current key is only shown masked, as placeholder.
+     */
+    private function keyField(string $field, string $provider, string $env): TextInput
     {
-        return app(LanguageModelFactory::class)->hasKey($provider)
-            ? "API key ({$env}): set ✓."
-            : "API key ({$env}): not set ✗.";
+        return TextInput::make($field)
+            ->label('API key')
+            ->password()
+            ->revealable()
+            ->autocomplete('off')
+            ->visible(fn ($get) => $get('llm_provider') === $provider)
+            ->placeholder(fn () => $this->keyPlaceholder($field, $env))
+            ->helperText(fn () => "Paste a key to save it (encrypted); it replaces {$env} from .env. Leave empty to keep the current key."
+                .($provider === 'openai_compatible' ? ' Not needed for a local Ollama.' : ''))
+            ->hintAction(
+                Action::make("keyPage_{$field}")
+                    ->label('Get an API key')
+                    ->icon(Heroicon::OutlinedArrowTopRightOnSquare)
+                    ->url(fn ($get) => self::keyPage($provider, $get('compatible_base_url')), shouldOpenInNewTab: true)
+                    ->visible(fn ($get) => self::keyPage($provider, $get('compatible_base_url')) !== null),
+            )
+            ->suffixAction(
+                Action::make("forgetKey_{$field}")
+                    ->icon(Heroicon::OutlinedTrash)
+                    ->color('danger')
+                    ->tooltip("Remove the saved key and use {$env} from .env")
+                    ->visible(fn () => SettingsStore::hasStoredSecret($field))
+                    ->requiresConfirmation()
+                    ->modalHeading('Remove the saved API key?')
+                    ->modalDescription(fn () => config(SettingsStore::SECRETS[$field].'_env')
+                        ? "ModBot then uses {$env} from .env again."
+                        : "There is no {$env} in .env, so this provider will have no key.")
+                    ->action(function () use ($field) {
+                        SettingsStore::forgetSecret($field);
+                        Notification::make()->title('Saved API key removed')->success()->send();
+                    }),
+            );
+    }
+
+    private function keyPlaceholder(string $field, string $env): string
+    {
+        $path = SettingsStore::SECRETS[$field];
+
+        if (SettingsStore::hasStoredSecret($field)) {
+            return SettingsStore::mask(config($path)).' · saved here';
+        }
+
+        if ($envKey = config("{$path}_env")) {
+            return SettingsStore::mask($envKey).' · from .env';
+        }
+
+        return 'Not set: paste a key';
+    }
+
+    private static function keyPage(string $provider, ?string $baseUrl): ?string
+    {
+        if ($provider !== 'openai_compatible') {
+            return self::KEY_PAGES[$provider] ?? null;
+        }
+
+        return self::KEY_PAGES[parse_url((string) $baseUrl, PHP_URL_HOST) ?: ''] ?? null;
     }
 
     public function testSlackAction(): Action
@@ -366,7 +448,17 @@ class Settings extends Page
 
         $data['llm_price_overrides'] = array_values($data['llm_price_overrides'] ?? []);
 
-        foreach (['article_lookback_hours', 'report_max_items', 'retention_days', 'log_retention_days'] as $key) {
+        // API keys: only a newly typed key is saved; the field is emptied again.
+        foreach (array_keys(SettingsStore::SECRETS) as $key) {
+            if (filled($data[$key] ?? null)) {
+                SettingsStore::saveSecret($key, $data[$key]);
+            }
+
+            unset($data[$key]);
+            $this->data[$key] = null;
+        }
+
+        foreach (['article_lookback_hours', 'report_max_items', 'retention_days', 'log_retention_days', 'llm_max_tokens', 'llm_batch_size'] as $key) {
             $data[$key] = (int) $data[$key];
         }
 
