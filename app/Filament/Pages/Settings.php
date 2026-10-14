@@ -203,11 +203,20 @@ class Settings extends Page
                     config([SettingsStore::KEYS[$key] => $value]);
                 }
 
+                $secret = SettingsStore::PROVIDER_SECRETS[$current['llm_provider']] ?? null;
+                $keyBefore = $secret ? config(SettingsStore::SECRETS[$secret]) : null;
+
                 foreach (array_intersect_key($current, SettingsStore::SECRETS) as $key => $value) {
                     if (filled($value)) {
                         config([SettingsStore::SECRETS[$key] => trim($value)]);
                     }
                 }
+
+                // Which key this test uses, masked; a typed key may not be saved yet.
+                $keyUsed = $secret ? config(SettingsStore::SECRETS[$secret]) : null;
+                $key = filled($keyUsed) && $keyUsed !== $keyBefore
+                    ? SettingsStore::mask($keyUsed).' (typed here, not saved yet)'
+                    : SettingsStore::keyHint($current['llm_provider']);
 
                 $started = microtime(true);
 
@@ -217,18 +226,19 @@ class Settings extends Page
                         'Test',
                     );
                 } catch (\Throwable $e) {
-                    Notification::make()->title('AI test failed')->body($this->explain($e))->danger()->persistent()->send();
+                    SettingsStore::apply();
+                    Notification::make()->title('AI test failed')->body($this->explain($e)."\nAPI key used: {$key}")->danger()->persistent()->send();
 
                     return;
-                } finally {
-                    SettingsStore::apply();
                 }
+
+                SettingsStore::apply();
 
                 $seconds = number_format(microtime(true) - $started, 1);
 
                 Notification::make()
                     ->title('AI connection works')
-                    ->body("{$result->model} answered \"".Str::limit($result->text, 40)."\" in {$seconds}s.")
+                    ->body("{$result->model} answered \"".Str::limit($result->text, 40)."\" in {$seconds}s. API key used: {$key}")
                     ->success()
                     ->send();
             });

@@ -100,6 +100,45 @@ class Settings
         config([self::SECRETS[$key] => config(self::SECRETS[$key].'_env')]);
     }
 
+    /** AI provider => its API key setting */
+    public const PROVIDER_SECRETS = [
+        'anthropic' => 'anthropic_api_key',
+        'openai' => 'openai_api_key',
+        'openai_compatible' => 'compatible_api_key',
+    ];
+
+    /**
+     * The key a provider uses, masked, with its source:
+     * "sk-ant-api…1AAA (from .env)". Safe for logs and the admin.
+     */
+    public static function keyHint(?string $provider = null): string
+    {
+        $provider ??= config('modbot.llm.provider');
+        $key = self::PROVIDER_SECRETS[$provider] ?? null;
+        $value = config("modbot.llm.providers.{$provider}.api_key");
+
+        if ($key === null || blank($value)) {
+            return 'none';
+        }
+
+        $source = rescue(fn () => self::hasStoredSecret($key), false, false) ? 'saved in ModBot' : 'from .env';
+
+        return self::mask($value)." ({$source})";
+    }
+
+    /**
+     * First 10 and last 4 characters ("sk-ant-api…1AAA"): the last 4 match how
+     * the provider consoles list keys; the rest of the key stays hidden.
+     */
+    public static function mask(string $secret): string
+    {
+        $secret = trim($secret);
+
+        return strlen($secret) <= 16
+            ? substr($secret, 0, 2).'…'.substr($secret, -2)
+            : substr($secret, 0, 10).'…'.substr($secret, -4);
+    }
+
     public static function hasStoredSecret(string $key): bool
     {
         return Setting::whereKey($key)->whereNotNull('value')->exists();

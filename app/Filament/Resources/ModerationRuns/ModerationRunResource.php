@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\ModerationRuns;
 
 use App\Filament\Actions\CancelRunAction;
+use App\Filament\Actions\RunNowAction;
 use App\Filament\Resources\ModerationRuns\Pages\ListModerationRuns;
 use App\Filament\Resources\ModerationRuns\Pages\ViewModerationRun;
 use App\Filament\Resources\ModerationRuns\RelationManagers\VerdictsRelationManager;
@@ -58,7 +59,11 @@ class ModerationRunResource extends Resource
                     ->schema([
                         TextEntry::make('status')->badge()->color(fn (string $state) => self::statusColor($state)),
                         TextEntry::make('trigger')
-                            ->formatStateUsing(fn (string $state, ModerationRun $record) => $record->schedule ? "{$state}: {$record->schedule->name}" : $state)
+                            ->formatStateUsing(fn (string $state, ModerationRun $record) => collect([
+                                $record->schedule ? "{$state}: {$record->schedule->name}" : $state,
+                                $record->retry_of_id ? "retry of #{$record->retry_of_id}" : null,
+                            ])->filter()->implode(' · '))
+                            ->url(fn (ModerationRun $record) => $record->retry_of_id ? self::getUrl('view', ['record' => $record->retry_of_id]) : null)
                             ->suffix(fn (ModerationRun $record) => $record->user ? " ({$record->user->name})" : ''),
                         TextEntry::make('dry_run')->label('Dry run')->formatStateUsing(fn (bool $state) => $state ? 'Yes' : 'No'),
                         TextEntry::make('started_at')
@@ -69,6 +74,8 @@ class ModerationRunResource extends Resource
                         TextEntry::make('article_window_start')->label('Articles published since')
                             ->dateTime('d-m H:i', 'Europe/Amsterdam')->placeholder('—'),
                         TextEntry::make('duration')->state(fn (ModerationRun $record) => $record->finished_at ? $record->started_at->diffForHumans($record->finished_at, true) : '—'),
+                        TextEntry::make('api_key')->label('API key')->placeholder('—')
+                            ->helperText('First and last characters; compare with the key list of your provider.'),
                         TextEntry::make('model')->placeholder('—')
                             ->prefix(fn (ModerationRun $record) => $record->provider ? "{$record->provider} · " : ''),
                         TextEntry::make('prompt_version')->placeholder('—'),
@@ -113,7 +120,11 @@ class ModerationRunResource extends Resource
                 TextColumn::make('started_at')->dateTime('d-m-Y H:i', 'Europe/Amsterdam')->sortable(),
                 TextColumn::make('status')->badge()->color(fn (string $state) => self::statusColor($state)),
                 TextColumn::make('trigger')->badge()->color('gray')
-                    ->description(fn (ModerationRun $record) => $record->schedule?->name),
+                    ->formatStateUsing(fn (string $state, ModerationRun $record) => $record->retry_of_id ? 'retry' : $state)
+                    ->description(fn (ModerationRun $record) => collect([
+                        $record->retry_of_id ? "of #{$record->retry_of_id}" : null,
+                        $record->schedule?->name,
+                    ])->filter()->implode(' · ') ?: null),
                 IconColumn::make('dry_run')->label('Dry')->boolean()->trueIcon(Heroicon::OutlinedEye)->falseIcon(null),
                 TextColumn::make('window')->label('Windows')
                     ->state(fn (ModerationRun $record) => ($record->articleWindowHours() !== null ? "A {$record->articleWindowHours()}h · " : '')."C {$record->commentWindowHours()}h")
@@ -140,6 +151,7 @@ class ModerationRunResource extends Resource
             ])
             ->recordActions([
                 CancelRunAction::make(),
+                RunNowAction::retry(),
                 ViewAction::make(),
             ]);
     }

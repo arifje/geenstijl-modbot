@@ -10,6 +10,7 @@ use App\Services\Analysis\SentimentSummarizer;
 use App\Services\GeenStijl\CommentSync;
 use App\Services\Reporting\Report;
 use App\Services\Reporting\ReportBuilder;
+use App\Support\Settings;
 use RuntimeException;
 
 /**
@@ -121,10 +122,12 @@ class ModerationPipeline
     {
         arsort($errors);
 
-        return collect($errors)
+        $described = collect($errors)
             ->take(3)
             ->map(fn (int $count, string $error) => $count > 1 ? "{$error} ({$count} batches)" : $error)
             ->implode('; ') ?: 'unknown error';
+
+        return $described.' — API key '.Settings::keyHint();
     }
 
     public function report(ModerationRun $run): Report

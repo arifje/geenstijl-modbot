@@ -9,6 +9,7 @@ use App\Models\ArticleSummary;
 use App\Models\Comment;
 use App\Models\CommentVerdict;
 use App\Models\ModerationRun;
+use App\Support\Settings;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -117,7 +118,15 @@ class CommentAnalyzer
      */
     private function recordFailure(array &$stats, Article $article, Collection $batch, string $error): void
     {
-        Log::error("Analysing comments failed: {$error}", ['category' => 'run', 'article' => $article->id, 'comments' => $batch->count()]);
+        $key = Settings::keyHint();
+
+        Log::error("Analysing comments failed: {$error} [API key {$key}]", [
+            'category' => 'run',
+            'article' => $article->id,
+            'comments' => $batch->count(),
+            'provider' => config('modbot.llm.provider'),
+            'api_key' => $key,
+        ]);
 
         $stats['failed'] += $batch->count();
         $stats['errors'][$error] = ($stats['errors'][$error] ?? 0) + 1;

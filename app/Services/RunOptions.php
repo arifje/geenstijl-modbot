@@ -21,6 +21,8 @@ final readonly class RunOptions
         public ?int $runId = null,
         // Articles published in the last X hours (default: the article window setting).
         public ?int $articleWindowHours = null,
+        // The run this one retries.
+        public ?int $retryOfId = null,
     ) {}
 
     public function articleHours(): int

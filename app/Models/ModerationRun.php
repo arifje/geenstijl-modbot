@@ -4,10 +4,12 @@ namespace App\Models;
 
 use App\Services\RunOptions;
 use App\Support\ModelPrices;
+use App\Support\Settings;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Arr;
 
 class ModerationRun extends Model
 {
@@ -22,6 +24,7 @@ class ModerationRun extends Model
             'window_end' => 'datetime',
             'article_window_start' => 'datetime',
             'dry_run' => 'boolean',
+            'options' => 'array',
         ];
     }
 
@@ -47,6 +50,7 @@ class ModerationRun extends Model
         return [
             'trigger' => $options->trigger,
             'provider' => config('modbot.llm.provider'),
+            'api_key' => Settings::keyHint(),
             'schedule_id' => $options->scheduleId,
             'user_id' => $options->userId,
             'dry_run' => $options->dryRun,
@@ -54,7 +58,41 @@ class ModerationRun extends Model
             'window_start' => $now->copy()->subHours($options->windowHours),
             'window_end' => $now,
             'article_window_start' => $now->copy()->subHours($options->articleHours()),
+            'options' => Arr::except($options->toArray(), ['runId']),
+            'retry_of_id' => $options->retryOfId,
         ];
+    }
+
+    public function canRetry(): bool
+    {
+        return in_array($this->status, ['failed', 'partial', 'cancelled'], true);
+    }
+
+    /**
+     * The "Run now" form values to run this run again. Runs from before the
+     * options were stored get them from their windows and schedule.
+     *
+     * @return array<string, mixed>
+     */
+    public function retryForm(): array
+    {
+        $options = $this->options ?? [];
+        $schedule = $this->schedule;
+
+        return [
+            'windowHours' => $options['windowHours'] ?? $this->commentWindowHours(),
+            'articleWindowHours' => $options['articleWindowHours'] ?? $this->articleWindowHours() ?? config('modbot.article_lookback_hours'),
+            'sendSlack' => $options['sendSlack'] ?? $schedule?->send_slack ?? true,
+            'sendEmail' => $options['sendEmail'] ?? $schedule?->send_email ?? false,
+            'slackChannel' => ($options['slackChannel'] ?? null) ?: $this->slack_channel ?: $schedule?->slack_channel ?: config('modbot.slack.channel'),
+            'dryRun' => $options['dryRun'] ?? $this->dry_run,
+            'reanalyze' => false,
+        ];
+    }
+
+    public function retryOf(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'retry_of_id');
     }
 
     /**
