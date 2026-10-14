@@ -85,18 +85,26 @@ class ApiKeysAndLimitsTest extends TestCase
         $this->assertSame(48000, Setting::find('llm_max_tokens')->value);
     }
 
-    public function test_an_api_key_is_stored_encrypted_and_replaces_the_env_key(): void
+    public function test_the_key_field_shows_the_env_key_and_saves_a_new_key_encrypted(): void
     {
         $this->actingAs(User::factory()->create());
         config(['modbot.llm.providers.anthropic.api_key' => 'sk-ant-from-env-0000']);
         SettingsStore::apply(); // remembers the .env key
 
+        // Filled with the .env key; saving it unchanged stores nothing.
         Livewire::test(Settings::class)
-            ->assertFormSet(['anthropic_api_key' => null])
-            ->fillForm(['anthropic_api_key' => 'sk-ant-saved-in-admin-1234'])
+            ->assertFormSet(['anthropic_api_key' => 'sk-ant-from-env-0000'])
+            ->assertSee('From .env (ANTHROPIC_API_KEY)')
+            ->call('save')
+            ->assertHasNoErrors();
+        $this->assertNull(Setting::find('anthropic_api_key'));
+
+        // A different key is stored encrypted and stays in the field.
+        Livewire::test(Settings::class)
+            ->fillForm(['anthropic_api_key' => ' sk-ant-saved-in-admin-1234 '])
             ->call('save')
             ->assertHasNoErrors()
-            ->assertFormSet(['anthropic_api_key' => null]); // never echoed back
+            ->assertFormSet(['anthropic_api_key' => ' sk-ant-saved-in-admin-1234 ']);
 
         $raw = Setting::find('anthropic_api_key')->value;
         $this->assertStringNotContainsString('saved-in-admin', $raw);
@@ -105,13 +113,15 @@ class ApiKeysAndLimitsTest extends TestCase
         SettingsStore::apply();
         $this->assertSame('sk-ant-saved-in-admin-1234', config('modbot.llm.providers.anthropic.api_key'));
 
-        // The page shows it masked only.
-        $html = $this->get('/admin/settings')->assertOk()->getContent();
-        $this->assertStringContainsString('sk-ant-…1234', $html);
-        $this->assertStringNotContainsString('sk-ant-saved-in-admin-1234', $html);
+        Livewire::test(Settings::class)
+            ->assertFormSet(['anthropic_api_key' => 'sk-ant-saved-in-admin-1234'])
+            ->assertSee('Saved in ModBot (encrypted)')
+            // Clearing the field goes back to .env.
+            ->fillForm(['anthropic_api_key' => ''])
+            ->call('save')
+            ->assertFormSet(['anthropic_api_key' => 'sk-ant-from-env-0000']);
 
-        // Removing it falls back to .env.
-        SettingsStore::forgetSecret('anthropic_api_key');
+        $this->assertNull(Setting::find('anthropic_api_key'));
         SettingsStore::apply();
         $this->assertSame('sk-ant-from-env-0000', config('modbot.llm.providers.anthropic.api_key'));
     }

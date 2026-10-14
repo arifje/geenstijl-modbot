@@ -44,7 +44,11 @@ class Settings extends Page
 
     public function mount(): void
     {
-        $this->form->fill(SettingsStore::all());
+        $this->form->fill([
+            ...SettingsStore::all(),
+            // The current API keys: saved here, or from .env.
+            ...collect(SettingsStore::SECRETS)->map(fn (string $path) => config($path))->all(),
+        ]);
     }
 
     public function form(Schema $schema): Schema
@@ -296,8 +300,9 @@ class Settings extends Page
     ];
 
     /**
-     * API key field: a key typed here is stored encrypted and replaces the
-     * .env key; the current key is only shown masked, as placeholder.
+     * API key field, filled with the current key: the one saved here, or the
+     * one from .env. A different key is stored encrypted; the .env key or an
+     * empty field means: use .env.
      */
     private function keyField(string $field, string $provider, string $env): TextInput
     {
@@ -307,47 +312,30 @@ class Settings extends Page
             ->revealable()
             ->autocomplete('off')
             ->visible(fn ($get) => $get('llm_provider') === $provider)
-            ->placeholder(fn () => $this->keyPlaceholder($field, $env))
-            ->helperText(fn () => "Paste a key to save it (encrypted); it replaces {$env} from .env. Leave empty to keep the current key."
-                .($provider === 'openai_compatible' ? ' Not needed for a local Ollama.' : ''))
+            ->placeholder($provider === 'openai_compatible' ? 'Not needed for a local Ollama' : 'Paste an API key')
+            ->helperText(fn () => $this->keySource($field, $env))
             ->hintAction(
                 Action::make("keyPage_{$field}")
                     ->label('Get an API key')
                     ->icon(Heroicon::OutlinedArrowTopRightOnSquare)
                     ->url(fn ($get) => self::keyPage($provider, $get('compatible_base_url')), shouldOpenInNewTab: true)
                     ->visible(fn ($get) => self::keyPage($provider, $get('compatible_base_url')) !== null),
-            )
-            ->suffixAction(
-                Action::make("forgetKey_{$field}")
-                    ->icon(Heroicon::OutlinedTrash)
-                    ->color('danger')
-                    ->tooltip("Remove the saved key and use {$env} from .env")
-                    ->visible(fn () => SettingsStore::hasStoredSecret($field))
-                    ->requiresConfirmation()
-                    ->modalHeading('Remove the saved API key?')
-                    ->modalDescription(fn () => config(SettingsStore::SECRETS[$field].'_env')
-                        ? "ModBot then uses {$env} from .env again."
-                        : "There is no {$env} in .env, so this provider will have no key.")
-                    ->action(function () use ($field) {
-                        SettingsStore::forgetSecret($field);
-                        Notification::make()->title('Saved API key removed')->success()->send();
-                    }),
             );
     }
 
-    private function keyPlaceholder(string $field, string $env): string
+    private function keySource(string $field, string $env): string
     {
-        $path = SettingsStore::SECRETS[$field];
+        $envKey = config(SettingsStore::SECRETS[$field].'_env');
 
         if (SettingsStore::hasStoredSecret($field)) {
-            return SettingsStore::mask(config($path)).' · saved here';
+            return 'Saved in ModBot (encrypted).'.($envKey
+                ? " Clear the field and save to use {$env} from .env again."
+                : '');
         }
 
-        if ($envKey = config("{$path}_env")) {
-            return SettingsStore::mask($envKey).' · from .env';
-        }
-
-        return 'Not set: paste a key';
+        return $envKey
+            ? "From .env ({$env}). Change it and save to store your own key (encrypted) instead."
+            : "Not set in .env ({$env}). Paste a key and save to store it (encrypted).";
     }
 
     private static function keyPage(string $provider, ?string $baseUrl): ?string
@@ -448,14 +436,19 @@ class Settings extends Page
 
         $data['llm_price_overrides'] = array_values($data['llm_price_overrides'] ?? []);
 
-        // API keys: only a newly typed key is saved; the field is emptied again.
-        foreach (array_keys(SettingsStore::SECRETS) as $key) {
-            if (filled($data[$key] ?? null)) {
-                SettingsStore::saveSecret($key, $data[$key]);
+        // API keys: a key other than the .env key is stored (encrypted); the
+        // .env key itself, or an empty field, means "use .env".
+        foreach (SettingsStore::SECRETS as $key => $path) {
+            $value = trim((string) ($data[$key] ?? ''));
+
+            if ($value === '' || $value === config("{$path}_env")) {
+                SettingsStore::forgetSecret($key);
+                $this->data[$key] = config($path);
+            } else {
+                SettingsStore::saveSecret($key, $value);
             }
 
             unset($data[$key]);
-            $this->data[$key] = null;
         }
 
         foreach (['article_lookback_hours', 'report_max_items', 'retention_days', 'log_retention_days', 'llm_max_tokens', 'llm_batch_size'] as $key) {

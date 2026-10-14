@@ -27,11 +27,12 @@ class CommentAnalyzer
 
     /**
      * @param  Collection<int, Comment>  $comments  comments not analysed yet
-     * @return array{analyzed: int, failed: int, flagged: int}
+     * @return array{analyzed: int, failed: int, flagged: int, errors: array<string, int>}
+     *                                                                                     errors: error message => number of failed batches
      */
     public function analyze(ModerationRun $run, Collection $comments): array
     {
-        $stats = ['analyzed' => 0, 'failed' => 0, 'flagged' => 0];
+        $stats = ['analyzed' => 0, 'failed' => 0, 'flagged' => 0, 'errors' => []];
 
         if ($comments->isEmpty()) {
             return $stats;
@@ -80,13 +81,11 @@ class CommentAnalyzer
                 return;
             }
 
-            Log::error('Analysing comments failed', ['article' => $article->id, 'error' => $e->getMessage().'. Raise "Max output tokens" under Settings.']);
-            $stats['failed'] += $batch->count();
+            $this->recordFailure($stats, $article, $batch, $e->getMessage().'. Raise "Max output tokens" under Settings.');
 
             return;
         } catch (\Throwable $e) {
-            Log::error('Analysing comments failed', ['article' => $article->id, 'error' => $e->getMessage()]);
-            $stats['failed'] += $batch->count();
+            $this->recordFailure($stats, $article, $batch, $e->getMessage());
 
             return;
         }
@@ -109,6 +108,19 @@ class CommentAnalyzer
                 'created_at' => now(),
             ]);
         }
+    }
+
+    /**
+     * Counts a failed batch and keeps its error, so the run can say why.
+     *
+     * @param  Collection<int, Comment>  $batch
+     */
+    private function recordFailure(array &$stats, Article $article, Collection $batch, string $error): void
+    {
+        Log::error("Analysing comments failed: {$error}", ['category' => 'run', 'article' => $article->id, 'comments' => $batch->count()]);
+
+        $stats['failed'] += $batch->count();
+        $stats['errors'][$error] = ($stats['errors'][$error] ?? 0) + 1;
     }
 
     /**

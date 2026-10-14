@@ -106,20 +106,6 @@ class Settings
     }
 
     /**
-     * "sk-ant-a…1b2c": enough to recognise a key, useless to anyone else.
-     */
-    public static function mask(?string $secret): ?string
-    {
-        if (blank($secret)) {
-            return null;
-        }
-
-        return strlen($secret) <= 12
-            ? str_repeat('•', 8)
-            : substr($secret, 0, 7).'…'.substr($secret, -4);
-    }
-
-    /**
      * Current effective values (stored or environment default).
      *
      * @return array<string, mixed>

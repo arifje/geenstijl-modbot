@@ -75,7 +75,7 @@ class ModerationPipeline
             $progress("Analysed {$stats['analyzed']}, flagged {$stats['flagged']}, failed {$stats['failed']}");
 
             if ($stats['analyzed'] === 0 && $stats['failed'] > 0) {
-                throw new RuntimeException("Analysis failed for all {$stats['failed']} comments, see the log.");
+                throw new RuntimeException("Analysis failed for all {$stats['failed']} comments: ".self::describeErrors($stats['errors']));
             }
 
             $inWindow = $run->moderatableComments();
@@ -95,6 +95,10 @@ class ModerationPipeline
                 $run->sentiment = $this->summarizer->summarize($run, $this->categoryCounts($run));
             }
 
+            if ($stats['failed'] > 0) {
+                $run->error = trim(($run->error ? $run->error."\n" : '')."Analysis failed for {$stats['failed']} comments: ".self::describeErrors($stats['errors']));
+            }
+
             $run->fill([
                 'status' => $stats['failed'] > 0 || $syncFailed > 0 ? 'partial' : 'succeeded',
                 'finished_at' => now(),
@@ -106,6 +110,21 @@ class ModerationPipeline
         }
 
         return $run;
+    }
+
+    /**
+     * "Anthropic API error: … (6 batches); …", most frequent first.
+     *
+     * @param  array<string, int>  $errors
+     */
+    private static function describeErrors(array $errors): string
+    {
+        arsort($errors);
+
+        return collect($errors)
+            ->take(3)
+            ->map(fn (int $count, string $error) => $count > 1 ? "{$error} ({$count} batches)" : $error)
+            ->implode('; ') ?: 'unknown error';
     }
 
     public function report(ModerationRun $run): Report
