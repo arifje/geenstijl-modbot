@@ -34,6 +34,8 @@ class LogEntryResource extends Resource
 
     protected static string|UnitEnum|null $navigationGroup = 'System';
 
+    protected static ?int $navigationSort = 2;
+
     public const CATEGORIES = ['app' => 'Application', 'run' => 'Runs', 'queue' => 'Queue', 'scheduler' => 'Scheduler'];
 
     public static function levelColor(string $level): string

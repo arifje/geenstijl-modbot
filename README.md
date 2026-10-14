@@ -147,6 +147,9 @@ Only the `web` container is recreated.
 
 ### Update to a new version
 
+**System → About & updates** shows whether PHP, Laravel, PostgreSQL and the packages need updates. Those are applied by a new ModBot release (dependencies) or by `bin/update`.
+
+
 ```bash
 bin/update
 ```
@@ -200,6 +203,8 @@ The admin panel at `/admin`:
 - **Prompts**: edit the moderation and summary prompts. Every save is a new version; older versions can be viewed and reactivated, and each version shows how many runs and flags it produced.
 - **Settings**: Slack channel, email recipients, AI provider, model, API key (stored encrypted; replaces the key from `.env`), max output tokens, comments per request, model prices, filters, login mode, retention. Stored in the database; they override `.env`. Each provider has a link to its API key page.
 - **Users**: who can log in.
+- **System → About & updates**: installed versions of ModBot, PHP, Laravel, PostgreSQL, FrankenPHP, Alpine and the main PHP packages, with the latest versions, end-of-support dates and known security issues (checked daily, or with "Check now"). The menu shows a count when something needs attention; "Email maintainer" sends the list to the maintainer (pixio, info@pixio.media).
+- **System → Logs**: application, queue, scheduler and run logs.
 
 ## AI providers
 

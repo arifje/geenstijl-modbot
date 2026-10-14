@@ -29,3 +29,8 @@ Schedule::command('queue:work --stop-when-empty --tries=1 --timeout=1500')
 Schedule::command('modbot:prune')
     ->dailyAt('04:00')
     ->timezone('Europe/Amsterdam');
+
+// Versions, end of life and security advisories, for System → About & updates.
+Schedule::command('modbot:check-updates')
+    ->dailyAt('03:30')
+    ->timezone('Europe/Amsterdam');

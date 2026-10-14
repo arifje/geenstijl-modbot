@@ -2,6 +2,16 @@
 
 return [
 
+    // Version of this installation (the VERSION file, updated with each release).
+    'version' => trim((string) @file_get_contents(base_path('VERSION'))) ?: 'dev',
+
+    // Who maintains this installation; shown under System → About & updates.
+    'maintainer' => [
+        'name' => env('MODBOT_MAINTAINER_NAME', 'pixio'),
+        'email' => env('MODBOT_MAINTAINER_EMAIL', 'info@pixio.media'),
+        'url' => env('MODBOT_MAINTAINER_URL') ?: null,
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | GeenStijl sources
