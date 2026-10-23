@@ -286,36 +286,191 @@ php artisan test
 vendor/bin/pint
 ```
 
-## Kubernetes
+## Deploying on Kubernetes
 
-CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the tests and pushes the image to `ghcr.io/arifje/geenstijl-modbot` on every push to `main` (tags: commit sha and `latest`; a `v1.2.3` git tag also publishes `1.2.3`, which is the chart's default image tag).
+This section is for the party that hosts ModBot in a Kubernetes cluster. Questions: pixio, info@pixio.media.
 
-The Helm chart in [`deploy/helm/modbot`](deploy/helm/modbot) runs one image in two roles:
+### What gets deployed
 
-- `scheduler`: single replica, `php artisan schedule:work` (scheduled runs + queue worker for runs started from the admin); an init container runs the migrations.
-- `web`: FrankenPHP serving the admin on port 8080, behind a Service and an optional Ingress.
+| Part | What it is | Notes |
+|---|---|---|
+| `modbot-scheduler` (Deployment) | Runs the schedules, the analyses and the queue (`php artisan schedule:work`). An init container runs the database migrations first. | **Exactly 1 replica** (strategy `Recreate`). |
+| `modbot-web` (Deployment + Service) | The admin panel at `/admin` (FrankenPHP on port 8080). Health check: `/up`. | Can run with more replicas. |
+| Ingress | HTTPS access to the admin. | Optional; only the admin needs to be reachable. |
+| PostgreSQL 17 | The only state: comments, flags, runs, settings, users, logs. | Not part of the chart: managed, existing, or CloudNativePG (below). |
 
-Postgres is external.
+The containers run as a non-root user (uid 82), need no volumes and keep no local state. The image is `ghcr.io/arifje/geenstijl-modbot:<version>`; CI publishes a version for every release tag. The Helm chart is in [`deploy/helm/modbot`](deploy/helm/modbot); pixio can also provide it as a packaged `.tgz` (`helm package deploy/helm/modbot`).
+
+**Network.** Nothing calls ModBot from outside except users of the admin. Outgoing HTTPS (443) is needed to:
+
+| Host | For |
+|---|---|
+| `content-api.prod.platform.gstech.nl`, `comments-api.prod.platform.gstech.nl` | GeenStijl articles and comments |
+| `api.anthropic.com` (or the OpenAI / other AI provider in use) | the analysis |
+| `slack.com` | Slack reports |
+| `api.ahasend.com` | email reports and login codes |
+| `endoflife.date`, `repo.packagist.org`, `packagist.org`, `api.github.com` | the daily update check (System → About & updates) |
+
+Admin users' browsers also load a font from `fonts.bunny.net`.
+
+**Resources.** About 50m CPU and 150–300 MB memory per pod (the values file sets requests and limits). The database stays small: well under 1 GB with the default retention of 90 days.
+
+### Requirements
+
+- Kubernetes 1.27 or newer, `kubectl` and Helm 3
+- An ingress controller and TLS certificates (e.g. ingress-nginx + cert-manager)
+- PostgreSQL 17: a managed database, an existing server, or [CloudNativePG](https://cloudnative-pg.io) in the cluster
+- From pixio: a token to pull the image from ghcr.io, and the API keys and tokens (Anthropic, Slack, AhaSend)
+
+### 1. Namespace
 
 ```bash
-kubectl create secret generic modbot-secrets \
-  --from-literal=APP_KEY=base64:... \
-  --from-literal=DB_USERNAME=modbot --from-literal=DB_PASSWORD=... \
-  --from-literal=ANTHROPIC_API_KEY=... --from-literal=SLACK_BOT_TOKEN=... \
-  --from-literal=AHASEND_API_KEY=... --from-literal=AHASEND_ACCOUNT_ID=...
-
-helm upgrade --install modbot deploy/helm/modbot \
-  --set existingSecret=modbot-secrets \
-  --set config.DB_HOST=<postgres host> \
-  --set config.AHASEND_RECIPIENTS="..." \
-  --set config.APP_URL=https://modbot.example.com \
-  --set ingress.enabled=true --set ingress.host=modbot.example.com
-
-# First admin user
-kubectl exec -it deploy/modbot-modbot-web -- php artisan make:filament-user
+kubectl create namespace modbot
 ```
 
-If the GHCR package is private, add an image pull secret (`imagePullSecrets` in the chart values).
+### 2. Database
+
+**Option A — managed or existing PostgreSQL 17.** Create a database and a user:
+
+```sql
+CREATE USER modbot WITH PASSWORD '<strong password>';
+CREATE DATABASE modbot OWNER modbot;
+```
+
+Use its hostname as `DB_HOST` in step 5, and the password in step 4.
+
+**Option B — CloudNativePG in the cluster** (with the operator installed). Save as `modbot-db.yaml`:
+
+```yaml
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: modbot-db
+  namespace: modbot
+spec:
+  instances: 2
+  imageName: ghcr.io/cloudnative-pg/postgresql:17
+  storage:
+    size: 5Gi
+  bootstrap:
+    initdb:
+      database: modbot
+      owner: modbot
+```
+
+```bash
+kubectl apply -f modbot-db.yaml
+kubectl -n modbot get cluster modbot-db          # wait for "Cluster in healthy state"
+```
+
+The database host is then `modbot-db-rw`. CloudNativePG generates the password in the Secret `modbot-db-app`:
+
+```bash
+kubectl -n modbot get secret modbot-db-app -o jsonpath='{.data.password}' | base64 -d
+```
+
+Set up backups for this database (CloudNativePG supports scheduled backups to object storage); it is the only state of ModBot.
+
+### 3. Access to the image
+
+The image is private. With the token from pixio:
+
+```bash
+kubectl -n modbot create secret docker-registry ghcr-pull \
+  --docker-server=ghcr.io --docker-username=arifje --docker-password='<token from pixio>'
+```
+
+### 4. Secrets
+
+Generate an application key once. **Keep it, and never change it**: it encrypts sessions and the API keys that can be saved in the admin.
+
+```bash
+echo "base64:$(openssl rand -base64 32)"
+```
+
+Create the Secret with that key, the database credentials and the keys from pixio:
+
+```bash
+kubectl -n modbot create secret generic modbot-secrets \
+  --from-literal=APP_KEY='base64:...' \
+  --from-literal=DB_USERNAME=modbot \
+  --from-literal=DB_PASSWORD='<database password>' \
+  --from-literal=ANTHROPIC_API_KEY='<from pixio>' \
+  --from-literal=SLACK_BOT_TOKEN='<from pixio>' \
+  --from-literal=AHASEND_API_KEY='<from pixio>' \
+  --from-literal=AHASEND_ACCOUNT_ID='<from pixio>'
+```
+
+If your cluster manages secrets with Sealed Secrets or External Secrets, create a Secret named `modbot-secrets` with these keys that way. The chart only reads it.
+
+### 5. Values
+
+Copy [`deploy/helm/modbot/values-production.example.yaml`](deploy/helm/modbot/values-production.example.yaml) to `values-production.yaml` and fill in the `<...>` placeholders:
+
+- `image.tag`: the version to install (e.g. `1.12.1`)
+- `config.APP_URL` and `ingress.host`: the address of the admin, e.g. `https://modbot.example.com`
+- `config.DB_HOST`: the database host (`modbot-db-rw` with CloudNativePG)
+- `config.TRUSTED_PROXIES`: include the pod network of your ingress controller (e.g. `192.168.0.0/16` with Calico), so client IPs and HTTPS are recognised
+- `ingress.className`, the TLS annotation and secret name: as used in your cluster
+- `config.SLACK_CHANNEL`, `config.AHASEND_RECIPIENTS`: where reports go (can be changed in the admin later)
+
+All available settings and their defaults are in [`deploy/helm/modbot/values.yaml`](deploy/helm/modbot/values.yaml).
+
+### 6. Install
+
+From a checkout of this repository:
+
+```bash
+helm upgrade --install modbot deploy/helm/modbot -n modbot -f values-production.yaml
+```
+
+Or with the packaged chart from pixio: `helm upgrade --install modbot modbot-1.12.1.tgz -n modbot -f values-production.yaml`.
+
+Check that everything runs:
+
+```bash
+kubectl -n modbot get pods                                    # modbot-scheduler-… and modbot-web-… Running
+kubectl -n modbot logs deploy/modbot-scheduler -c migrate     # "Running migrations" / "Nothing to migrate"
+curl -fsS https://modbot.example.com/up                       # 200
+```
+
+### 7. First user and checks
+
+Create the first admin user (use a real email address: login codes are sent there):
+
+```bash
+kubectl -n modbot exec -it deploy/modbot-web -- php artisan make:filament-user
+```
+
+Then log in at `https://modbot.example.com/admin` and check under **Settings**: **Test AI connection**, **Send test message** (Slack) and **Send test email**. Start a dry run under **Runs → Run now** and enable the schedules under **Schedules**.
+
+### Updates
+
+Set `image.tag` in `values-production.yaml` to the new version and run the same `helm upgrade --install` command. The scheduler is replaced by the new version, whose init container first runs the database migrations; the web pods are replaced one by one at the same time (migrations only add to the database, so the old web pods keep working meanwhile). Take a database backup before an update. **System → About & updates** in the admin shows whether PHP, Laravel, PostgreSQL or packages need attention.
+
+To go back: `helm rollback modbot -n modbot` (database changes are not undone; restore the backup if needed).
+
+### Operations
+
+| Task | Command |
+|---|---|
+| Logs | `kubectl -n modbot logs deploy/modbot-scheduler` (also in the admin under System → Logs) |
+| Run from the command line | `kubectl -n modbot exec deploy/modbot-scheduler -- php artisan modbot:run --dry-run` |
+| Add a user | `kubectl -n modbot exec -it deploy/modbot-web -- php artisan make:filament-user` |
+| Password login back on | `kubectl -n modbot exec deploy/modbot-web -- php artisan modbot:password-login on` |
+| Database backup (without CloudNativePG backups) | `kubectl -n modbot exec <postgres pod> -- pg_dump -U modbot modbot > modbot.sql` |
+
+Keep the scheduler at **1 replica**: two schedulers would run every schedule twice. The web Deployment can be scaled.
+
+### Troubleshooting
+
+| Symptom | Check |
+|---|---|
+| `ImagePullBackOff` | The `ghcr-pull` Secret and token (step 3) |
+| Scheduler stuck in `Init` | The migrate container's log: database host, user, password, network policy to PostgreSQL |
+| `/admin` redirects to `http://` or shows "Page expired" | `config.APP_URL` must be the https address; `config.TRUSTED_PROXIES` must include the ingress controller's pod network |
+| No login code by email | `MAIL_MAILER: ahasend` and the AhaSend keys; Settings → Send test email |
+| Runs fail | The run page shows the cause (and which API key was used); Settings → Test AI connection |
 
 ## Roadmap
 

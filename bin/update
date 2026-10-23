@@ -58,7 +58,8 @@ else
 fi
 
 step "Building the image"
-"${COMPOSE[@]}" build
+# --pull: always fetch the latest base images (PHP / Alpine security patches)
+"${COMPOSE[@]}" build --pull
 
 step "Restarting (migrations run first)"
 "${COMPOSE[@]}" up -d

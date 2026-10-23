@@ -1,0 +1,68 @@
+# Example values for a production installation of ModBot.
+# Copy to values-production.yaml, fill in the <...> placeholders, and install:
+#
+#   helm upgrade --install modbot deploy/helm/modbot -n modbot -f values-production.yaml
+#
+# Secrets (API keys, database password, APP_KEY) are NOT in this file: they come
+# from the Secret named in `existingSecret` (see README → Deploying on Kubernetes).
+
+image:
+  repository: ghcr.io/arifje/geenstijl-modbot
+  # Pin a released version; update it to upgrade (see README).
+  tag: "1.12.1"
+
+# Pull secret for ghcr.io (the image is private).
+imagePullSecrets:
+  - name: ghcr-pull
+
+existingSecret: modbot-secrets
+
+config:
+  # The public address of the admin (must match the ingress host).
+  APP_URL: https://<modbot.example.com>
+
+  # Database (see README: managed PostgreSQL, or CloudNativePG → "<cluster>-rw").
+  DB_HOST: <modbot-db-rw>
+  DB_PORT: "5432"
+  DB_DATABASE: modbot
+
+  # The ingress controller's pod network, so client IPs and https are trusted
+  # from it (login throttling). Calico's default is 192.168.0.0/16.
+  TRUSTED_PROXIES: "127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12"
+
+  # Reports. These are defaults; they can be changed later in the admin (Settings).
+  SLACK_CHANNEL: "#<moderatie>"
+  AHASEND_RECIPIENTS: "<Name <mail@example.com>, other@example.com>"
+
+  # AI model (can also be changed in the admin).
+  MODBOT_LLM_PROVIDER: anthropic
+  MODBOT_LLM_MODEL: claude-opus-5-5
+
+ingress:
+  enabled: true
+  className: <nginx>
+  host: <modbot.example.com>
+  annotations:
+    # e.g. with cert-manager:
+    cert-manager.io/cluster-issuer: <letsencrypt-prod>
+  tls:
+    - secretName: modbot-tls
+      hosts: [<modbot.example.com>]
+
+# Scheduler (one replica; runs the analyses and the queue).
+resources:
+  requests:
+    cpu: 50m
+    memory: 192Mi
+  limits:
+    memory: 512Mi
+
+# Admin panel. Can run with more than one replica (sessions live in the database).
+web:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 384Mi

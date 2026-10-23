@@ -10,7 +10,10 @@ RUN composer dump-autoload --optimize --classmap-authoritative --no-dev
 # One image, two roles:
 #   web:       frankenphp php-server (admin panel on :8080)
 #   scheduler: php artisan schedule:work (default)
-FROM dunglas/frankenphp:php8.5-alpine
+# Pinned to an exact PHP patch release so a rebuild never silently keeps an
+# older one from the build cache. For a PHP security release, bump this tag
+# (see https://hub.docker.com/r/dunglas/frankenphp/tags?name=php8.5) and release.
+FROM dunglas/frankenphp:1.13.2-php8.5.12-alpine
 
 RUN install-php-extensions pdo_pgsql intl pcntl opcache zip \
     && mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" \
