@@ -4,6 +4,7 @@ namespace App\Filament\Queue;
 
 use App\Models\FailedJob;
 use App\Models\QueuedJob;
+use App\Services\QueueHealth;
 use App\Support\Heartbeat;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
@@ -55,6 +56,13 @@ class QueueStatus extends StatsOverviewWidget
         }
 
         $seen = Heartbeat::lastSeen('worker');
+
+        if (app(QueueHealth::class)->workerBlocked()) {
+            return Stat::make('Queue worker', 'Blocked')
+                ->description('A previous worker still holds the lock, so no new worker starts. It is released automatically when jobs wait '
+                    .QueueHealth::STUCK_MINUTES.' minutes, or use "Release worker".')
+                ->color('danger');
+        }
 
         return Stat::make('Queue worker', Heartbeat::alive('scheduler') ? 'Idle' : 'Stopped')
             ->description('Started by the scheduler every minute'.($seen ? '; last active '.$seen->diffForHumans() : '').'.')

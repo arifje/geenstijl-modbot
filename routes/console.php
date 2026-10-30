@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Schedule as RunSchedule;
+use App\Services\QueueHealth;
 use Illuminate\Support\Facades\Schedule;
 
 // Report schedules are managed in the admin (/admin/schedules). The
@@ -20,10 +21,14 @@ foreach ($schedules as $schedule) {
         ->runInBackground();
 }
 
-// Runs started from the admin.
+// Runs started from the admin. The check goes first: it releases a lock left
+// by a worker that is gone, so the worker below can start in the same minute.
+Schedule::command('modbot:queue-check')->everyMinute();
+
 Schedule::command('queue:work --stop-when-empty --tries=1 --timeout=1500')
     ->everyMinute()
     ->withoutOverlapping(30)
+    ->createMutexNameUsing(QueueHealth::WORKER_MUTEX)
     ->runInBackground();
 
 Schedule::command('modbot:prune')

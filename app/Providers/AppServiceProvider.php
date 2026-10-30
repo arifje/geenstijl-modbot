@@ -67,10 +67,7 @@ class AppServiceProvider extends ServiceProvider
         Queue::before(fn () => Heartbeat::beat('worker'));
         Event::listen([ScheduledTaskStarting::class, ScheduledTaskSkipped::class], fn () => Heartbeat::beat('scheduler'));
 
-        // The queue worker is started every minute; only log it when it fails.
-        $isWorker = fn ($task) => str_contains((string) $task->command, 'queue:work');
-
-        Event::listen(ScheduledTaskStarting::class, fn ($e) => $isWorker($e->task) ? null
+        Event::listen(ScheduledTaskStarting::class, fn ($e) => $this->everyMinute($e->task) ? null
             : Log::info('Scheduled task started: '.$this->taskName($e->task), ['category' => 'scheduler']));
         // Background tasks (runInBackground) report "finished" as soon as they are
         // started, without an exit code; their result arrives with
@@ -88,8 +85,7 @@ class AppServiceProvider extends ServiceProvider
     {
         $failed = $task->exitCode !== 0;
 
-        // The queue worker runs every minute; only log it when it fails.
-        if (! $failed && str_contains((string) $task->command, 'queue:work')) {
+        if (! $failed && $this->everyMinute($task)) {
             return;
         }
 
@@ -98,6 +94,15 @@ class AppServiceProvider extends ServiceProvider
             'exit_code' => $task->exitCode,
             'seconds' => $seconds !== null ? round($seconds, 1) : null,
         ], fn ($value) => $value !== null));
+    }
+
+    /**
+     * The queue worker and its check run every minute; they are only logged
+     * when they fail (the check logs what it fixes itself).
+     */
+    private function everyMinute(object $task): bool
+    {
+        return str_contains((string) $task->command, 'queue:work') || str_contains((string) $task->command, 'modbot:queue-check');
     }
 
     private function taskName(object $task): string

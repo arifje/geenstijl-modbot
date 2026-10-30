@@ -48,7 +48,7 @@ spec:
         - name: scheduler
           image: {{ include "modbot.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["php", "artisan", "schedule:work"]
+          command: ["sh", "-c", "php artisan modbot:recover; exec php artisan schedule:work"]
           envFrom:
             {{- include "modbot.envFrom" . | nindent 12 }}
           securityContext:

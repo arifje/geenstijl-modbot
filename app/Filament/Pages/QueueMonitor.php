@@ -6,6 +6,7 @@ use App\Filament\Queue\ActiveJobsTable;
 use App\Filament\Queue\FailedJobsTable;
 use App\Filament\Queue\QueueStatus;
 use App\Models\FailedJob;
+use App\Services\QueueHealth;
 use App\Support\Heartbeat;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -15,6 +16,7 @@ use Filament\Schemas\Components\Livewire;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Log;
 use UnitEnum;
 
 /**
@@ -42,11 +44,12 @@ class QueueMonitor extends Page
     }
 
     /**
-     * Red when the scheduler stopped, otherwise the number of failed jobs.
+     * Red when the scheduler stopped or the worker is blocked, otherwise the
+     * number of failed jobs.
      */
     public static function getNavigationBadge(): ?string
     {
-        if (! Heartbeat::alive('scheduler')) {
+        if (! Heartbeat::alive('scheduler') || rescue(fn () => app(QueueHealth::class)->workerBlocked(), false, false)) {
             return '!';
         }
 
@@ -62,7 +65,11 @@ class QueueMonitor extends Page
 
     public static function getNavigationBadgeTooltip(): ?string
     {
-        return Heartbeat::alive('scheduler') ? 'Failed jobs' : 'The scheduler is not running';
+        return match (true) {
+            ! Heartbeat::alive('scheduler') => 'The scheduler is not running',
+            app(QueueHealth::class)->workerBlocked() => 'The queue worker is blocked',
+            default => 'Failed jobs',
+        };
     }
 
     public function content(Schema $schema): Schema
@@ -77,6 +84,18 @@ class QueueMonitor extends Page
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('releaseWorker')
+                ->label('Release worker')
+                ->icon(Heroicon::OutlinedLockOpen)
+                ->color('warning')
+                ->visible(fn () => app(QueueHealth::class)->workerBlocked())
+                ->requiresConfirmation()
+                ->modalDescription('Removes the lock of a worker that is gone, so the scheduler starts a new one within a minute.')
+                ->action(function (QueueHealth $health) {
+                    $health->releaseWorker();
+                    Log::warning('Queue worker lock released from the admin.', ['category' => 'queue', 'user' => auth()->user()?->email]);
+                    Notification::make()->title('Worker released')->body('A new worker starts within a minute.')->success()->send();
+                }),
             Action::make('deleteFailed')
                 ->label('Delete all failed jobs')
                 ->icon(Heroicon::OutlinedTrash)

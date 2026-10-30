@@ -207,6 +207,8 @@ The admin panel at `/admin`:
 - **Users**: who can log in.
 - **System → About & updates**: installed versions of ModBot, PHP, Laravel, PostgreSQL, FrankenPHP, Alpine and the main PHP packages, with the latest versions, end-of-support dates and known security issues (checked daily, or with "Check now"). The menu shows a count when something needs attention; "Email maintainer" sends the list to the maintainer (pixio, info@pixio.media).
 - **System → Queue**: whether the scheduler is running (the menu shows a red **!** when it has not been seen for 3 minutes), the queue worker, waiting and running jobs (a waiting run can be cancelled), and failed jobs (view the error, retry, delete). When scheduled runs don't happen, look here first.
+
+  The queue repairs itself. When the scheduler container starts, it clears the locks a previous container left behind, and marks runs that were interrupted by the restart as failed, so they can be retried. Every minute it also checks the queue. If jobs have been waiting 3 minutes while no worker is running, it releases the old worker's lock. A queued run whose job is gone is marked failed after 10 minutes. Both show up under **System → Logs**. A blocked worker can also be released by hand with **Release worker**.
 - **System → Logs**: application, queue, scheduler and run logs.
 
 ## AI providers
@@ -412,7 +414,7 @@ If your cluster manages secrets with Sealed Secrets or External Secrets, create 
 
 Copy [`deploy/helm/modbot/values-production.example.yaml`](deploy/helm/modbot/values-production.example.yaml) to `values-production.yaml` and fill in the `<...>` placeholders:
 
-- `image.tag`: the version to install (e.g. `1.13.0`)
+- `image.tag`: the version to install (e.g. `1.13.1`)
 - `config.APP_URL` and `ingress.host`: the address of the admin, e.g. `https://modbot.example.com`
 - `config.DB_HOST`: the database host (`modbot-db-rw` with CloudNativePG)
 - `config.TRUSTED_PROXIES`: include the pod network of your ingress controller (e.g. `192.168.0.0/16` with Calico), so client IPs and HTTPS are recognised
@@ -429,7 +431,7 @@ From a checkout of this repository:
 helm upgrade --install modbot deploy/helm/modbot -n modbot -f values-production.yaml
 ```
 
-Or with the packaged chart from pixio: `helm upgrade --install modbot modbot-1.13.0.tgz -n modbot -f values-production.yaml`.
+Or with the packaged chart from pixio: `helm upgrade --install modbot modbot-1.13.1.tgz -n modbot -f values-production.yaml`.
 
 Check that everything runs:
 

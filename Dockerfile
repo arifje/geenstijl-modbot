@@ -42,4 +42,5 @@ EXPOSE 8080
 # docker-compose and Kubernetes define their own checks per role.
 HEALTHCHECK NONE
 
-CMD ["php", "artisan", "schedule:work"]
+# Scheduler: first clear what a previous scheduler container left behind.
+CMD ["sh", "-c", "php artisan modbot:recover; exec php artisan schedule:work"]
