@@ -138,6 +138,10 @@ return [
         // false: log in with only a code sent by email (no password).
         // Switch in the admin under Settings, or: php artisan modbot:password-login on|off
         'password_login' => (bool) env('MODBOT_PASSWORD_LOGIN', true),
+        // Failed logins (wrong password, wrong code, unknown address) before an
+        // email address is locked; an IP address may fail 4x as often.
+        'max_failed_logins' => (int) env('MODBOT_MAX_FAILED_LOGINS', 5),
+        'lockout_minutes' => (int) env('MODBOT_LOGIN_LOCKOUT_MINUTES', 15),
     ],
 
 ];

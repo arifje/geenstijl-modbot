@@ -38,6 +38,8 @@ class Settings
         'retention_days' => 'modbot.retention_days',
         'log_retention_days' => 'modbot.log_retention_days',
         'password_login' => 'modbot.auth.password_login',
+        'max_failed_logins' => 'modbot.auth.max_failed_logins',
+        'lockout_minutes' => 'modbot.auth.lockout_minutes',
     ];
 
     /** setting key => config path of an API key */

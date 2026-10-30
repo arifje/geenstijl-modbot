@@ -119,6 +119,8 @@ Under **Settings → Login**, switch off **Password login**. Users then log in w
 docker compose --profile app exec web php artisan modbot:password-login on
 ```
 
+Failed logins are capped: after 5 failed attempts (wrong password, wrong code or unknown address) an email address is locked for 15 minutes, and one IP address after 20. Both numbers can be changed under **Settings → Login**; lockouts appear under **System → Logs**.
+
 ---
 
 ## Day-to-day operations
@@ -204,6 +206,7 @@ The admin panel at `/admin`:
 - **Settings**: Slack channel, email recipients, AI provider, model, API key (stored encrypted; replaces the key from `.env`), max output tokens, comments per request, model prices, filters, login mode, retention. Stored in the database; they override `.env`. Each provider has a link to its API key page.
 - **Users**: who can log in.
 - **System → About & updates**: installed versions of ModBot, PHP, Laravel, PostgreSQL, FrankenPHP, Alpine and the main PHP packages, with the latest versions, end-of-support dates and known security issues (checked daily, or with "Check now"). The menu shows a count when something needs attention; "Email maintainer" sends the list to the maintainer (pixio, info@pixio.media).
+- **System → Queue**: whether the scheduler is running (the menu shows a red **!** when it has not been seen for 3 minutes), the queue worker, waiting and running jobs (a waiting run can be cancelled), and failed jobs (view the error, retry, delete). When scheduled runs don't happen, look here first.
 - **System → Logs**: application, queue, scheduler and run logs.
 
 ## AI providers
@@ -251,6 +254,8 @@ Secrets and defaults are environment variables, see [`.env.example`](.env.exampl
 | `MODBOT_APPROVAL_FILTER` | `unapproved` | Which comments to analyse: `unapproved` (waiting for a moderator), `approved` or `all` |
 | `MODBOT_REPORT_CRON` | `0 8,20 * * *` | Only seeds the first schedule |
 | `MODBOT_PASSWORD_LOGIN` | `true` | `false`: log in with only an emailed code |
+| `MODBOT_MAX_FAILED_LOGINS` | `5` | Failed logins before an email address is locked (an IP address: 4×) |
+| `MODBOT_LOGIN_LOCKOUT_MINUTES` | `15` | How long a lockout lasts |
 | `MAIL_MAILER` | `ahasend` | `log` writes mails (login codes) to `storage/logs` instead |
 | `MODBOT_RETENTION_DAYS` | `90` | Days to keep comments, flags and runs (cleanup runs daily at 04:00) |
 | `MODBOT_LOG_RETENTION_DAYS` | `14` | Days to keep log entries in the admin |
@@ -407,7 +412,7 @@ If your cluster manages secrets with Sealed Secrets or External Secrets, create 
 
 Copy [`deploy/helm/modbot/values-production.example.yaml`](deploy/helm/modbot/values-production.example.yaml) to `values-production.yaml` and fill in the `<...>` placeholders:
 
-- `image.tag`: the version to install (e.g. `1.12.1`)
+- `image.tag`: the version to install (e.g. `1.13.0`)
 - `config.APP_URL` and `ingress.host`: the address of the admin, e.g. `https://modbot.example.com`
 - `config.DB_HOST`: the database host (`modbot-db-rw` with CloudNativePG)
 - `config.TRUSTED_PROXIES`: include the pod network of your ingress controller (e.g. `192.168.0.0/16` with Calico), so client IPs and HTTPS are recognised
@@ -424,7 +429,7 @@ From a checkout of this repository:
 helm upgrade --install modbot deploy/helm/modbot -n modbot -f values-production.yaml
 ```
 
-Or with the packaged chart from pixio: `helm upgrade --install modbot modbot-1.12.1.tgz -n modbot -f values-production.yaml`.
+Or with the packaged chart from pixio: `helm upgrade --install modbot modbot-1.13.0.tgz -n modbot -f values-production.yaml`.
 
 Check that everything runs:
 

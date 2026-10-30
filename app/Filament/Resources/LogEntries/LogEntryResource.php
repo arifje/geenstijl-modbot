@@ -34,7 +34,7 @@ class LogEntryResource extends Resource
 
     protected static string|UnitEnum|null $navigationGroup = 'System';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 3;
 
     public const CATEGORIES = ['app' => 'Application', 'run' => 'Runs', 'queue' => 'Queue', 'scheduler' => 'Scheduler'];
 

@@ -7,10 +7,12 @@ use App\Services\Analysis\LanguageModel;
 use App\Services\Analysis\LanguageModelFactory;
 use App\Services\Analysis\PromptRepository;
 use App\Services\Reporting\AhaSendMailer;
+use App\Support\Heartbeat;
 use App\Support\Settings;
 use Illuminate\Console\Events\ScheduledBackgroundTaskFinished;
 use Illuminate\Console\Events\ScheduledTaskFailed;
 use Illuminate\Console\Events\ScheduledTaskFinished;
+use Illuminate\Console\Events\ScheduledTaskSkipped;
 use Illuminate\Console\Events\ScheduledTaskStarting;
 use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Queue\Events\JobProcessed;
@@ -56,6 +58,14 @@ class AppServiceProvider extends ServiceProvider
         Queue::before(fn (JobProcessing $e) => Log::info("Job started: {$e->job->resolveName()}", ['category' => 'queue']));
         Queue::after(fn (JobProcessed $e) => Log::info("Job finished: {$e->job->resolveName()}", ['category' => 'queue']));
         Queue::failing(fn (JobFailed $e) => Log::error("Job failed: {$e->job->resolveName()}", ['category' => 'queue', 'exception' => $e->exception]));
+
+        // "Last seen" for System → Queue. The worker task is due every minute,
+        // so the scheduler starts or skips (still running) something each minute.
+        Queue::looping(function () {
+            Heartbeat::beat('worker');
+        });
+        Queue::before(fn () => Heartbeat::beat('worker'));
+        Event::listen([ScheduledTaskStarting::class, ScheduledTaskSkipped::class], fn () => Heartbeat::beat('scheduler'));
 
         // The queue worker is started every minute; only log it when it fails.
         $isWorker = fn ($task) => str_contains((string) $task->command, 'queue:work');

@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
+use Illuminate\Support\Str;
 
 /**
  * What runs in this installation and whether it is up to date: versions,
@@ -196,12 +197,25 @@ class SystemReport
      */
     private function frankenphp(): array
     {
-        $output = rescue(fn () => Process::timeout(5)->run(['frankenphp', 'version'])->output(), '', false);
+        $binary = is_executable('/usr/local/bin/frankenphp') ? '/usr/local/bin/frankenphp' : 'frankenphp';
+        $error = null;
+        $output = rescue(function () use ($binary, &$error) {
+            $result = Process::timeout(15)->run([$binary, 'version']);
+            $error = trim($result->errorOutput()) ?: null;
+
+            return $result->output();
+        }, function (\Throwable $e) use (&$error) {
+            $error = $e->getMessage();
+
+            return '';
+        }, false);
         $installed = preg_match('/FrankenPHP v?(\d+\.\d+\.\d+)/', $output, $m) ? $m[1] : null;
         $row = ['name' => 'FrankenPHP (web server)', 'group' => 'Runtime', 'installed' => $installed, 'latest' => null, 'eol' => null, 'status' => 'unknown', 'note' => null];
 
         if ($installed === null) {
-            $row['note'] = 'Not running in the Docker image.';
+            $row['note'] = $binary === 'frankenphp'
+                ? 'Not running in the Docker image.'
+                : 'Could not read the version: '.Str::limit($error ?: 'no output', 150);
 
             return $row;
         }

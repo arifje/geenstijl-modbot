@@ -137,11 +137,17 @@ class Settings extends Page
                             ->helperText('Articles published in the last X hours, for the command line and as default for Run now. Schedules have their own. GeenStijl closes comments 12 hours after publication.'),
                     ]),
                 Section::make('Login')
+                    ->columns(2)
                     ->schema([
                         Toggle::make('password_login')->label('Password login')
                             ->helperText(fn () => 'On: password + a code by email. Off: only a code by email (no passwords to steal). '
                                 .'Codes are sent with mail driver "'.config('mail.default').'"; send a test email first. '
-                                .'If emails stop arriving, turn it back on with: php artisan modbot:password-login on'),
+                                .'If emails stop arriving, turn it back on with: php artisan modbot:password-login on')
+                            ->columnSpanFull(),
+                        TextInput::make('max_failed_logins')->label('Failed logins before lockout')->numeric()->minValue(3)->maxValue(100)->required()
+                            ->helperText('Per email address. One IP address is locked after 4× as many failures. Wrong passwords, wrong codes and unknown addresses all count.'),
+                        TextInput::make('lockout_minutes')->label('Lockout (minutes)')->numeric()->minValue(1)->maxValue(1440)->required()
+                            ->helperText('How long a locked email address or IP address has to wait.'),
                     ]),
                 Section::make('Report & data')
                     ->afterHeader([$this->cleanupAction()])
@@ -461,7 +467,7 @@ class Settings extends Page
             unset($data[$key]);
         }
 
-        foreach (['article_lookback_hours', 'report_max_items', 'retention_days', 'log_retention_days', 'llm_max_tokens', 'llm_batch_size'] as $key) {
+        foreach (['article_lookback_hours', 'report_max_items', 'retention_days', 'log_retention_days', 'llm_max_tokens', 'llm_batch_size', 'max_failed_logins', 'lockout_minutes'] as $key) {
             $data[$key] = (int) $data[$key];
         }
 

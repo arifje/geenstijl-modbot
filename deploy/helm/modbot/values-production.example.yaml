@@ -9,7 +9,7 @@
 image:
   repository: ghcr.io/arifje/geenstijl-modbot
   # Pin a released version; update it to upgrade (see README).
-  tag: "1.12.1"
+  tag: "1.13.0"
 
 # Pull secret for ghcr.io (the image is private).
 imagePullSecrets:
