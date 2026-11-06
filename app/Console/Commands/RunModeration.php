@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\ModerationRun;
 use App\Models\Schedule;
 use App\Services\ModerationPipeline;
 use App\Services\ModerationRunner;
@@ -10,6 +11,7 @@ use App\Services\RunOptions;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
 
 #[Signature('modbot:run
     {--schedule= : Run with the settings of this schedule id}
@@ -19,13 +21,18 @@ use Illuminate\Console\Command;
     {--no-slack : Do not post to Slack}
     {--no-email : Do not send the email report}
     {--channel= : Override the Slack channel}
-    {--reanalyze : Analyse comments in the window again, replacing earlier verdicts}')]
+    {--reanalyze : Analyse comments in the window again, replacing earlier verdicts}
+    {--queue : Hand the run to the queue worker instead of running it here (used by the scheduler)}')]
 #[Description('Sync recent comments, analyse new ones and send the moderation report')]
 class RunModeration extends Command
 {
     public function handle(ModerationRunner $runner, ModerationPipeline $pipeline, SlackFormatter $formatter): int
     {
         $options = $this->buildOptions();
+
+        if ($this->option('queue')) {
+            return $this->queue($options);
+        }
 
         try {
             $run = $runner->run($options, fn (string $m) => $this->components->info($m));
@@ -55,6 +62,26 @@ class RunModeration extends Command
 
             return self::FAILURE;
         }
+
+        return self::SUCCESS;
+    }
+
+    private function queue(RunOptions $options): int
+    {
+        // While the worker is down, don't pile up one run per schedule tick.
+        $waiting = $options->scheduleId
+            ? ModerationRun::where('schedule_id', $options->scheduleId)->where('status', 'queued')->value('id')
+            : null;
+
+        if ($waiting) {
+            Log::warning("Schedule #{$options->scheduleId}: not queued again, run #{$waiting} is still waiting for the queue worker.", ['category' => 'queue']);
+            $this->components->warn("Run #{$waiting} of this schedule is still waiting; not queued again.");
+
+            return self::SUCCESS;
+        }
+
+        $run = ModerationRun::dispatch($options);
+        $this->components->info("Queued run #{$run->id}.");
 
         return self::SUCCESS;
     }

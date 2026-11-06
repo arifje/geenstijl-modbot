@@ -26,6 +26,10 @@
         <env name="SLACK_BOT_TOKEN" value="" force="true"/>
         <env name="AHASEND_API_KEY" value="" force="true"/>
         <env name="AHASEND_ACCOUNT_ID" value="" force="true"/>
+        <env name="SLACK_ENABLED" value="true" force="true"/>
+        <env name="AHASEND_ENABLED" value="true" force="true"/>
+        <env name="AHASEND_SANDBOX" value="false" force="true"/>
+        <env name="AHASEND_RECIPIENTS" value="" force="true"/>
         <env name="MAIL_MAILER" value="array" force="true"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>

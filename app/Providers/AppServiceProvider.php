@@ -59,8 +59,9 @@ class AppServiceProvider extends ServiceProvider
         Queue::after(fn (JobProcessed $e) => Log::info("Job finished: {$e->job->resolveName()}", ['category' => 'queue']));
         Queue::failing(fn (JobFailed $e) => Log::error("Job failed: {$e->job->resolveName()}", ['category' => 'queue', 'exception' => $e->exception]));
 
-        // "Last seen" for System → Queue. The worker task is due every minute,
-        // so the scheduler starts or skips (still running) something each minute.
+        // "Last seen" for System → Queue. The queue check is due every minute,
+        // so the scheduler starts something each minute; an idle worker looks
+        // for a job every few seconds.
         Queue::looping(function () {
             Heartbeat::beat('worker');
         });
@@ -97,12 +98,12 @@ class AppServiceProvider extends ServiceProvider
     }
 
     /**
-     * The queue worker and its check run every minute; they are only logged
-     * when they fail (the check logs what it fixes itself).
+     * The queue check runs every minute; it is only logged when it fails (it
+     * logs what it fixes itself).
      */
     private function everyMinute(object $task): bool
     {
-        return str_contains((string) $task->command, 'queue:work') || str_contains((string) $task->command, 'modbot:queue-check');
+        return str_contains((string) $task->command, 'modbot:queue-check');
     }
 
     private function taskName(object $task): string

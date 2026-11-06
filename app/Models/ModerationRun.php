@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Jobs\RunModerationJob;
 use App\Services\RunOptions;
 use App\Support\ModelPrices;
 use App\Support\Settings;
@@ -38,6 +39,17 @@ class ModerationRun extends Model
             'status' => 'queued',
             ...self::attributesFor($options),
         ]);
+    }
+
+    /**
+     * Queue a run and hand it to the queue worker.
+     */
+    public static function dispatch(RunOptions $options): self
+    {
+        $run = self::queue($options);
+        RunModerationJob::dispatch([...$options->toArray(), 'runId' => $run->id]);
+
+        return $run;
     }
 
     /**

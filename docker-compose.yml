@@ -19,6 +19,9 @@ x-app: &app
   profiles: ["app"]
   env_file: .env
   restart: unless-stopped
+  # A small init as PID 1 cleans up finished child processes (php as PID 1
+  # does not; they pile up until the container can start no new process).
+  init: true
   environment:
     # Inside Docker the database is the "db" service, whatever .env says.
     DB_HOST: db
@@ -52,8 +55,18 @@ services:
       db:
         condition: service_healthy
 
+  # Queues the scheduled runs (schedules in the admin) and does upkeep.
   scheduler:
     <<: *app
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  # Runs every moderation run, one at a time. It first cleans up after a
+  # previous worker, and restarts itself every hour (Docker starts it again).
+  worker:
+    <<: *app
+    command: ["sh", "-c", "php artisan modbot:recover; exec php artisan queue:work --tries=1 --timeout=1500 --max-time=3600"]
     depends_on:
       migrate:
         condition: service_completed_successfully

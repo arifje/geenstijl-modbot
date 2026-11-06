@@ -10,7 +10,7 @@ Successor to the Make.com scenario "Geenstijl Comments AI moderation report".
 
 ## Installation (Docker, step by step)
 
-This installs ModBot on a server (or your own machine) with Docker Compose: a Postgres database, the scheduler and the admin panel.
+This installs ModBot on a server (or your own machine) with Docker Compose: a Postgres database, the scheduler, the queue worker and the admin panel.
 
 ModBot only makes **outgoing** connections (GeenStijl, the AI provider, Slack, AhaSend), so it works behind a firewall without port forwarding. Only the admin panel needs to be reachable for you, see [Reaching the admin behind a firewall](#reaching-the-admin-behind-a-firewall).
 
@@ -70,13 +70,13 @@ Copy the output (`base64:…`) into `.env` as `APP_KEY=base64:…`.
 docker compose --profile app up -d
 ```
 
-This starts the database, runs the database migrations, and then starts the scheduler and the admin. Check that everything is up:
+This starts the database, runs the database migrations, and then starts the scheduler, the worker and the admin. Check that everything is up:
 
 ```bash
 docker compose --profile app ps
 ```
 
-`db`, `scheduler` and `web` should be running (`web` becomes `healthy` after ~30 seconds); `migrate` has exited with code 0.
+`db`, `scheduler`, `worker` and `web` should be running (`web` becomes `healthy` after ~30 seconds); `migrate` has exited with code 0.
 
 ### 7. Create your admin user
 
@@ -130,7 +130,7 @@ All commands are run in the project directory.
 | Task | Command |
 |---|---|
 | Status | `docker compose --profile app ps` |
-| Logs | `docker compose --profile app logs -f scheduler web` |
+| Logs | `docker compose --profile app logs -f scheduler worker web` |
 | Stop | `docker compose --profile app down` (data is kept) |
 | Start | `docker compose --profile app up -d` |
 | Run from the command line | `docker compose --profile app exec scheduler php artisan modbot:run --dry-run` |
@@ -206,9 +206,9 @@ The admin panel at `/admin`:
 - **Settings**: Slack channel, email recipients, AI provider, model, API key (stored encrypted; replaces the key from `.env`), max output tokens, comments per request, model prices, filters, login mode, retention. Stored in the database; they override `.env`. Each provider has a link to its API key page.
 - **Users**: who can log in.
 - **System → About & updates**: installed versions of ModBot, PHP, Laravel, PostgreSQL, FrankenPHP, Alpine and the main PHP packages, with the latest versions, end-of-support dates and known security issues (checked daily, or with "Check now"). The menu shows a count when something needs attention; "Email maintainer" sends the list to the maintainer (pixio, info@pixio.media).
-- **System → Queue**: whether the scheduler is running (the menu shows a red **!** when it has not been seen for 3 minutes), the queue worker, waiting and running jobs (a waiting run can be cancelled), and failed jobs (view the error, retry, delete). When scheduled runs don't happen, look here first.
+- **System → Queue**: whether the scheduler and the queue worker are running (the menu shows a red **!** when either has not been seen for 3 minutes), waiting and running jobs (a waiting run can be cancelled), and failed jobs (view the error, retry, delete). When scheduled runs don't happen, look here first.
 
-  The queue repairs itself. When the scheduler container starts, it clears the locks a previous container left behind, and marks runs that were interrupted by the restart as failed, so they can be retried. Every minute it also checks the queue. If jobs have been waiting 3 minutes while no worker is running, it releases the old worker's lock. A queued run whose job is gone is marked failed after 10 minutes. Both show up under **System → Logs**. A blocked worker can also be released by hand with **Release worker**.
+  The scheduler only queues the scheduled runs; the `worker` container runs every run (scheduled or started from the admin), one at a time. Docker or Kubernetes keeps the worker running, and it restarts itself every hour. When it starts, it marks runs that a previous worker was doing as failed, so they can be retried. A queued run whose job is gone is marked failed after 10 minutes, and while a schedule's run is still waiting, the schedule does not queue another one. These show up under **System → Logs**. **Restart worker** restarts the worker after its current job.
 - **System → Logs**: application, queue, scheduler and run logs.
 
 ## AI providers
@@ -226,7 +226,7 @@ After adding a key to `.env`, restart: `docker compose --profile app up -d`.
 ## How it works
 
 ```
-modbot:run (scheduler, per schedule in the admin; or "Run now")
+modbot:run (queued by the scheduler per schedule in the admin, or by "Run now"; run by the queue worker)
  ├─ sync      articles published in the article window + their comments → Postgres
  ├─ analyse   comments from the comment window, on articles from the article window,
  │            matching the approval filter and not analysed before
@@ -282,7 +282,7 @@ php artisan db:seed
 php artisan serve
 ```
 
-The admin runs at http://localhost:8000/admin; `db:seed` creates a local user (see `database/seeders/DatabaseSeeder.php`). Run the scheduler (scheduled runs and "Run now") in a second terminal with `php artisan schedule:work`.
+The admin runs at http://localhost:8000/admin; `db:seed` creates a local user (see `database/seeders/DatabaseSeeder.php`). Run the scheduler (queues the scheduled runs) with `php artisan schedule:work` and the worker (runs them, and "Run now") with `php artisan queue:work --tries=1 --timeout=1500`, each in its own terminal.
 
 ```bash
 php artisan modbot:run --dry-run              # print the Slack report, send nothing
@@ -301,7 +301,8 @@ This section is for the party that hosts ModBot in a Kubernetes cluster. Questio
 
 | Part | What it is | Notes |
 |---|---|---|
-| `modbot-scheduler` (Deployment) | Runs the schedules, the analyses and the queue (`php artisan schedule:work`). An init container runs the database migrations first. | **Exactly 1 replica** (strategy `Recreate`). |
+| `modbot-scheduler` (Deployment) | Queues the scheduled runs and does upkeep (`php artisan schedule:work`). An init container runs the database migrations first. | **Exactly 1 replica** (strategy `Recreate`). |
+| `modbot-worker` (Deployment) | Runs every moderation run, one at a time (`php artisan queue:work`). Restarts itself every hour. | **Exactly 1 replica** (strategy `Recreate`). |
 | `modbot-web` (Deployment + Service) | The admin panel at `/admin` (FrankenPHP on port 8080). Health check: `/up`. | Can run with more replicas. |
 | Ingress | HTTPS access to the admin. | Optional; only the admin needs to be reachable. |
 | PostgreSQL 17 | The only state: comments, flags, runs, settings, users, logs. | Not part of the chart: managed, existing, or CloudNativePG (below). |
@@ -414,7 +415,7 @@ If your cluster manages secrets with Sealed Secrets or External Secrets, create 
 
 Copy [`deploy/helm/modbot/values-production.example.yaml`](deploy/helm/modbot/values-production.example.yaml) to `values-production.yaml` and fill in the `<...>` placeholders:
 
-- `image.tag`: the version to install (e.g. `1.13.1`)
+- `image.tag`: the version to install (e.g. `1.14.0`)
 - `config.APP_URL` and `ingress.host`: the address of the admin, e.g. `https://modbot.example.com`
 - `config.DB_HOST`: the database host (`modbot-db-rw` with CloudNativePG)
 - `config.TRUSTED_PROXIES`: include the pod network of your ingress controller (e.g. `192.168.0.0/16` with Calico), so client IPs and HTTPS are recognised
@@ -431,12 +432,12 @@ From a checkout of this repository:
 helm upgrade --install modbot deploy/helm/modbot -n modbot -f values-production.yaml
 ```
 
-Or with the packaged chart from pixio: `helm upgrade --install modbot modbot-1.13.1.tgz -n modbot -f values-production.yaml`.
+Or with the packaged chart from pixio: `helm upgrade --install modbot modbot-1.14.0.tgz -n modbot -f values-production.yaml`.
 
 Check that everything runs:
 
 ```bash
-kubectl -n modbot get pods                                    # modbot-scheduler-… and modbot-web-… Running
+kubectl -n modbot get pods                                    # modbot-scheduler-…, modbot-worker-… and modbot-web-… Running
 kubectl -n modbot logs deploy/modbot-scheduler -c migrate     # "Running migrations" / "Nothing to migrate"
 curl -fsS https://modbot.example.com/up                       # 200
 ```
@@ -461,13 +462,13 @@ To go back: `helm rollback modbot -n modbot` (database changes are not undone; r
 
 | Task | Command |
 |---|---|
-| Logs | `kubectl -n modbot logs deploy/modbot-scheduler` (also in the admin under System → Logs) |
+| Logs | `kubectl -n modbot logs deploy/modbot-worker` or `deploy/modbot-scheduler` (also in the admin under System → Logs) |
 | Run from the command line | `kubectl -n modbot exec deploy/modbot-scheduler -- php artisan modbot:run --dry-run` |
 | Add a user | `kubectl -n modbot exec -it deploy/modbot-web -- php artisan make:filament-user` |
 | Password login back on | `kubectl -n modbot exec deploy/modbot-web -- php artisan modbot:password-login on` |
 | Database backup (without CloudNativePG backups) | `kubectl -n modbot exec <postgres pod> -- pg_dump -U modbot modbot > modbot.sql` |
 
-Keep the scheduler at **1 replica**: two schedulers would run every schedule twice. The web Deployment can be scaled.
+Keep the scheduler and the worker at **1 replica**: two schedulers would queue every schedule twice, and a starting worker cleans up after the previous one. The web Deployment can be scaled.
 
 ### Troubleshooting
 

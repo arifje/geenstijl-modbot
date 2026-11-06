@@ -2,7 +2,6 @@
 
 namespace App\Filament\Actions;
 
-use App\Jobs\RunModerationJob;
 use App\Models\ModerationRun;
 use App\Models\Schedule;
 use App\Services\RunOptions;
@@ -95,8 +94,7 @@ class RunNowAction
             retryOfId: $retryOfId,
         );
 
-        $run = ModerationRun::queue($options);
-        RunModerationJob::dispatch([...$options->toArray(), 'runId' => $run->id]);
+        $run = ModerationRun::dispatch($options);
 
         Notification::make()
             ->title($retryOfId ? 'Retry queued' : 'Run queued')

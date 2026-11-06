@@ -7,9 +7,10 @@ RUN composer install --no-dev --no-scripts --no-autoloader --no-interaction --pr
 COPY . .
 RUN composer dump-autoload --optimize --classmap-authoritative --no-dev
 
-# One image, two roles:
+# One image, three roles:
 #   web:       frankenphp php-server (admin panel on :8080)
 #   scheduler: php artisan schedule:work (default)
+#   worker:    php artisan queue:work (runs the moderation runs)
 # Pinned to an exact PHP patch release so a rebuild never silently keeps an
 # older one from the build cache. For a PHP security release, bump this tag
 # (see https://hub.docker.com/r/dunglas/frankenphp/tags?name=php8.5) and release.
@@ -42,5 +43,4 @@ EXPOSE 8080
 # docker-compose and Kubernetes define their own checks per role.
 HEALTHCHECK NONE
 
-# Scheduler: first clear what a previous scheduler container left behind.
-CMD ["sh", "-c", "php artisan modbot:recover; exec php artisan schedule:work"]
+CMD ["php", "artisan", "schedule:work"]

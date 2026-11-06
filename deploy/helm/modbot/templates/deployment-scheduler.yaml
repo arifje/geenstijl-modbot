@@ -25,6 +25,9 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
+      # The pod's pause process becomes PID 1 and cleans up finished child
+      # processes (php does not; they would pile up until no process can start).
+      shareProcessNamespace: true
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -48,7 +51,7 @@ spec:
         - name: scheduler
           image: {{ include "modbot.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["sh", "-c", "php artisan modbot:recover; exec php artisan schedule:work"]
+          command: ["php", "artisan", "schedule:work"]
           envFrom:
             {{- include "modbot.envFrom" . | nindent 12 }}
           securityContext:

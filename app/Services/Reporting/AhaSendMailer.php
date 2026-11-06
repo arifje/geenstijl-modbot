@@ -10,16 +10,28 @@ use RuntimeException;
 class AhaSendMailer
 {
     /**
-     * Sends the report and returns the AhaSend message id.
+     * Sends the report and returns what was sent, for the log.
+     *
+     * @return array{id: ?string, recipients: list<string>, subject: string, sandbox: bool}
      */
-    public function send(Report $report): ?string
+    public function send(Report $report): array
     {
-        return $this->post(
-            config('modbot.email.recipients'),
-            'GeenStijl '.Str::lcfirst($report->title()),
+        $recipients = $this->recipients((string) config('modbot.email.recipients'));
+        $subject = 'GeenStijl '.Str::lcfirst($report->title());
+
+        $id = $this->deliver(
+            $recipients,
+            $subject,
             view('emails.report', ['report' => $report])->render(),
             view('emails.report-text', ['report' => $report])->render(),
         );
+
+        return [
+            'id' => $id,
+            'recipients' => array_column($recipients, 'email'),
+            'subject' => $subject,
+            'sandbox' => (bool) config('modbot.email.sandbox'),
+        ];
     }
 
     /**
@@ -43,11 +55,6 @@ class AhaSendMailer
         });
 
         return config('mail.default');
-    }
-
-    private function post(string $recipients, string $subject, string $html, string $text): ?string
-    {
-        return $this->deliver($this->recipients($recipients), $subject, $html, $text);
     }
 
     /**

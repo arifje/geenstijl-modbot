@@ -15,7 +15,7 @@ config:
   LOG_STACK: stderr,database
   LOG_LEVEL: info
   CACHE_STORE: database
-  # Runs started from the admin are queued and picked up by the scheduler.
+  # All runs (scheduled and from the admin) are queued and run by the worker.
   QUEUE_CONNECTION: database
   SESSION_DRIVER: database
   SESSION_SECURE_COOKIE: "true"

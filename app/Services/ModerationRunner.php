@@ -6,6 +6,7 @@ use App\Models\ModerationRun;
 use App\Models\Schedule;
 use App\Services\Reporting\AhaSendMailer;
 use App\Services\Reporting\SlackNotifier;
+use App\Support\Settings;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -87,7 +88,8 @@ class ModerationRunner
             ]);
 
             if (! $options->dryRun) {
-                $this->deliver($run, $options->sendSlack, $options->sendEmail, $options->slackChannel, $progress);
+                // deliver() writes its own, more detailed log entries.
+                $this->deliver($run, $options->sendSlack, $options->sendEmail, $options->slackChannel, $output);
             }
 
             return $run;
@@ -98,7 +100,8 @@ class ModerationRunner
 
     /**
      * Sends the report of a run. Errors are recorded on the run instead of
-     * thrown, so one failing channel does not block the other.
+     * thrown, so one failing channel does not block the other. Every send,
+     * skip and failure is logged with what was sent and to whom.
      *
      * @param  callable(string): void|null  $progress
      * @return list<string> delivery errors
@@ -108,24 +111,53 @@ class ModerationRunner
         $progress ??= fn (string $message) => null;
         $report = $this->pipeline->report($run);
         $errors = [];
+        $context = array_filter([
+            'category' => 'run',
+            'run_id' => $run->id,
+            'flagged' => $run->flagged_count,
+            'sent_by' => auth()->user()?->email,
+        ], fn ($value) => $value !== null);
 
-        if ($slack && config('modbot.slack.enabled')) {
+        if ($slack && ! config('modbot.slack.enabled')) {
+            Log::info("Run #{$run->id}: Slack report not sent, Slack is switched off", $context);
+        } elseif ($slack) {
+            $channelSource = $channel === null ? Settings::source('slack_channel') : 'chosen for this send';
+            $channel ??= config('modbot.slack.channel');
+            $slackContext = [...$context, 'channel' => $channel, 'channel_source' => $channelSource];
+
             try {
-                $channel ??= config('modbot.slack.channel');
-                $run->update(['slack_channel' => $channel, 'slack_ts' => $this->slack->send($report, $channel)]);
+                $ts = $this->slack->send($report, $channel);
+                $run->update(['slack_channel' => $channel, 'slack_ts' => $ts]);
+                Log::info("Run #{$run->id}: report posted to Slack {$channel}", [...$slackContext, 'message_ts' => $ts]);
                 $progress("Posted report to Slack {$channel}");
             } catch (\Throwable $e) {
-                Log::error('Sending the report to Slack failed: '.$e->getMessage(), ['category' => 'run', 'run_id' => $run->id]);
+                Log::error("Run #{$run->id}: sending the report to Slack {$channel} failed: ".$e->getMessage(), $slackContext);
                 $errors[] = 'Slack: '.$e->getMessage();
             }
         }
 
-        if ($email && config('modbot.email.enabled')) {
+        if ($email && ! config('modbot.email.enabled')) {
+            Log::info("Run #{$run->id}: email report not sent, email is switched off", $context);
+        } elseif ($email) {
+            $emailContext = [
+                ...$context,
+                'recipients' => array_column($this->mailer->recipients((string) config('modbot.email.recipients')), 'email'),
+                'recipients_source' => Settings::source('email_recipients'),
+            ];
+
             try {
-                $run->update(['email_message_id' => $this->mailer->send($report)]);
-                $progress('Sent email report');
+                $sent = $this->mailer->send($report);
+                $run->update(['email_message_id' => $sent['id']]);
+                $to = implode(', ', $sent['recipients']);
+                Log::info("Run #{$run->id}: email report sent to {$to}".($sent['sandbox'] ? ' (AhaSend sandbox: not delivered)' : ''), [
+                    ...$emailContext,
+                    'subject' => $sent['subject'],
+                    'message_id' => $sent['id'],
+                    'sandbox' => $sent['sandbox'],
+                ]);
+                $progress("Sent email report to {$to}");
             } catch (\Throwable $e) {
-                Log::error('Sending the report by email failed: '.$e->getMessage(), ['category' => 'run', 'run_id' => $run->id]);
+                Log::error("Run #{$run->id}: sending the report by email failed: ".$e->getMessage(), $emailContext);
                 $errors[] = 'Email: '.$e->getMessage();
             }
         }

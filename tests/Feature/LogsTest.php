@@ -61,7 +61,7 @@ class LogsTest extends TestCase
     {
         Log::setDefaultDriver('database');
         $schedule = app(Schedule::class);
-        $worker = $schedule->command('queue:work --stop-when-empty')->runInBackground();
+        $worker = $schedule->command('modbot:queue-check')->runInBackground();
         $run = $schedule->command('modbot:run --schedule=1')->runInBackground();
 
         // Started in the background: no exit code yet, nothing to report.
@@ -79,7 +79,7 @@ class LogsTest extends TestCase
 
         $this->assertSame([
             'info: Scheduled task finished: modbot:run --schedule=1',
-            'error: Scheduled task failed: queue:work --stop-when-empty',
+            'error: Scheduled task failed: modbot:queue-check',
         ], LogEntry::orderBy('id')->get()->map(fn ($e) => "{$e->level}: {$e->message}")->all());
     }
 

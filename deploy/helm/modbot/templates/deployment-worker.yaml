@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "modbot.fullname" . }}-worker
+  labels:
+    {{- include "modbot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  # One worker: runs are processed one at a time, and a starting worker
+  # cleans up after the previous one.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "modbot.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        {{- include "modbot.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: worker
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      # The pod's pause process becomes PID 1 and cleans up finished child
+      # processes (php does not; they would pile up until no process can start).
+      shareProcessNamespace: true
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 82   # www-data in the alpine image
+        runAsGroup: 82
+      containers:
+        - name: worker
+          image: {{ include "modbot.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # Restarts every hour (--max-time); Kubernetes starts it again.
+          command: ["sh", "-c", "php artisan modbot:recover; exec php artisan queue:work --tries=1 --timeout=1500 --max-time=3600"]
+          envFrom:
+            {{- include "modbot.envFrom" . | nindent 12 }}
+          securityContext:
+            {{- include "modbot.securityContext" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

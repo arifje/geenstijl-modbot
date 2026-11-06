@@ -9,24 +9,23 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Started by the scheduler container before schedule:work (Dockerfile CMD,
- * Helm chart). Only run it where no scheduler is running.
+ * Started by the worker container before queue:work (docker-compose.yml,
+ * Helm chart). Only run it where no queue worker is running.
  */
 #[Signature('modbot:recover')]
-#[Description('Clear locks and interrupted runs left behind by a previous scheduler container')]
+#[Description('Fail runs and hand back jobs left behind by a previous queue worker')]
 class RecoverAfterRestart extends Command
 {
     public function handle(QueueHealth $health): int
     {
         $result = $health->recoverAfterRestart();
 
-        Log::info('Scheduler started; cleared locks of the previous scheduler.', ['category' => 'scheduler', ...$result]);
-
-        if ($result['interrupted']) {
-            Log::warning("{$result['interrupted']} run(s) were interrupted by the restart and marked failed.", ['category' => 'run']);
+        // The worker restarts every hour; only log when there was something to clean up.
+        if ($result['interrupted'] || $result['released_jobs']) {
+            Log::warning("Queue worker restarted: {$result['interrupted']} interrupted run(s) marked failed, {$result['released_jobs']} unfinished job(s) handed back.", ['category' => 'queue', ...$result]);
         }
 
-        $this->components->info("Cleared scheduler locks; {$result['interrupted']} interrupted run(s) marked failed, {$result['released_jobs']} unfinished job(s) handed back.");
+        $this->components->info("Queue worker starting; {$result['interrupted']} interrupted run(s) marked failed, {$result['released_jobs']} unfinished job(s) handed back.");
 
         return self::SUCCESS;
     }

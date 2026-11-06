@@ -39,17 +39,16 @@ class QueueMonitor extends Page
 
     public function getSubheading(): ?string
     {
-        return 'The scheduler container runs the schedules and starts a queue worker every minute; '
-            .'the worker processes the waiting jobs (runs started from the admin) and stops.';
+        return 'The scheduler queues the scheduled runs; the worker container runs them, and the runs started from the admin, one at a time.';
     }
 
     /**
-     * Red when the scheduler stopped or the worker is blocked, otherwise the
-     * number of failed jobs.
+     * Red when the scheduler or the worker stopped, otherwise the number of
+     * failed jobs.
      */
     public static function getNavigationBadge(): ?string
     {
-        if (! Heartbeat::alive('scheduler') || rescue(fn () => app(QueueHealth::class)->workerBlocked(), false, false)) {
+        if (self::problem() !== null) {
             return '!';
         }
 
@@ -65,10 +64,15 @@ class QueueMonitor extends Page
 
     public static function getNavigationBadgeTooltip(): ?string
     {
+        return self::problem() ?? 'Failed jobs';
+    }
+
+    private static function problem(): ?string
+    {
         return match (true) {
             ! Heartbeat::alive('scheduler') => 'The scheduler is not running',
-            app(QueueHealth::class)->workerBlocked() => 'The queue worker is blocked',
-            default => 'Failed jobs',
+            ! rescue(fn () => app(QueueHealth::class)->workerAlive(), true, false) => 'The queue worker is not running',
+            default => null,
         };
     }
 
@@ -84,17 +88,16 @@ class QueueMonitor extends Page
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('releaseWorker')
-                ->label('Release worker')
-                ->icon(Heroicon::OutlinedLockOpen)
-                ->color('warning')
-                ->visible(fn () => app(QueueHealth::class)->workerBlocked())
+            Action::make('restartWorker')
+                ->label('Restart worker')
+                ->icon(Heroicon::OutlinedArrowPath)
+                ->color('gray')
                 ->requiresConfirmation()
-                ->modalDescription('Removes the lock of a worker that is gone, so the scheduler starts a new one within a minute.')
-                ->action(function (QueueHealth $health) {
-                    $health->releaseWorker();
-                    Log::warning('Queue worker lock released from the admin.', ['category' => 'queue', 'user' => auth()->user()?->email]);
-                    Notification::make()->title('Worker released')->body('A new worker starts within a minute.')->success()->send();
+                ->modalDescription('The worker stops after the job it is running (if any) and is started again by Docker or Kubernetes, with the latest settings and code.')
+                ->action(function () {
+                    Artisan::call('queue:restart');
+                    Log::info('Queue worker restart requested from the admin.', ['category' => 'queue', 'user' => auth()->user()?->email]);
+                    Notification::make()->title('Worker restarts')->body('It starts again within a few seconds, after the current job.')->success()->send();
                 }),
             Action::make('deleteFailed')
                 ->label('Delete all failed jobs')

@@ -143,7 +143,23 @@ class Settings
 
     public static function hasStoredSecret(string $key): bool
     {
+        return self::isStored($key);
+    }
+
+    /**
+     * Whether a value is saved in the admin (otherwise .env is used).
+     */
+    public static function isStored(string $key): bool
+    {
         return Setting::whereKey($key)->whereNotNull('value')->exists();
+    }
+
+    /**
+     * Where a setting's current value comes from, for logs.
+     */
+    public static function source(string $key): string
+    {
+        return rescue(fn () => self::isStored($key), false, false) ? 'Settings' : '.env';
     }
 
     /**

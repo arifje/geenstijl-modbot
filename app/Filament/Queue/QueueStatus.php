@@ -32,22 +32,22 @@ class QueueStatus extends StatsOverviewWidget
 
         return match (true) {
             $seen === null => Stat::make('Scheduler', 'Not seen yet')
-                ->description('Schedules and the queue only run while the scheduler container runs.')
+                ->description('Scheduled runs are only queued while the scheduler container runs.')
                 ->color('danger'),
             Heartbeat::alive('scheduler') => Stat::make('Scheduler', 'Running')
                 ->description('Last seen '.$seen->diffForHumans())
                 ->color('success'),
             default => Stat::make('Scheduler', 'Not running')
-                ->description('Last seen '.$seen->timezone('Europe/Amsterdam')->format('d-m H:i').' ('.$seen->diffForHumans().'). No schedules or queued runs are processed.')
+                ->description('Last seen '.$seen->timezone('Europe/Amsterdam')->format('d-m H:i').' ('.$seen->diffForHumans().'). Scheduled runs are not queued.')
                 ->color('danger'),
         };
     }
 
     private function worker(): Stat
     {
-        $busy = QueuedJob::whereNotNull('reserved_at')->orderBy('reserved_at')->first();
+        $health = app(QueueHealth::class);
 
-        if ($busy) {
+        if ($busy = $health->busyJob()) {
             $run = $busy->runId() ? " (run #{$busy->runId()})" : '';
 
             return Stat::make('Queue worker', 'Busy')
@@ -57,16 +57,16 @@ class QueueStatus extends StatsOverviewWidget
 
         $seen = Heartbeat::lastSeen('worker');
 
-        if (app(QueueHealth::class)->workerBlocked()) {
-            return Stat::make('Queue worker', 'Blocked')
-                ->description('A previous worker still holds the lock, so no new worker starts. It is released automatically when jobs wait '
-                    .QueueHealth::STUCK_MINUTES.' minutes, or use "Release worker".')
-                ->color('danger');
+        if ($health->workerAlive()) {
+            return Stat::make('Queue worker', 'Running')
+                ->description('Waiting for jobs; last checked '.$seen->diffForHumans().'.')
+                ->color('success');
         }
 
-        return Stat::make('Queue worker', Heartbeat::alive('scheduler') ? 'Idle' : 'Stopped')
-            ->description('Started by the scheduler every minute'.($seen ? '; last active '.$seen->diffForHumans() : '').'.')
-            ->color(Heartbeat::alive('scheduler') ? 'gray' : 'danger');
+        return Stat::make('Queue worker', 'Not running')
+            ->description(($seen ? 'Last seen '.$seen->timezone('Europe/Amsterdam')->format('d-m H:i').'. ' : '')
+                .'No runs are processed. Check the worker container (docker compose ps worker).')
+            ->color('danger');
     }
 
     private function waiting(): Stat

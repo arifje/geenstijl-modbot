@@ -6,12 +6,15 @@ use App\Jobs\RunModerationJob;
 use App\Models\ArticleSummary;
 use App\Models\Comment;
 use App\Models\CommentVerdict;
+use App\Models\LogEntry;
 use App\Models\ModerationRun;
+use App\Models\QueuedJob;
 use App\Models\Schedule;
 use App\Services\Analysis\LanguageModel;
 use App\Services\ModerationPipeline;
 use App\Services\ModerationRunner;
 use App\Services\RunOptions;
+use App\Support\Settings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Carbon;
@@ -131,6 +134,27 @@ class RunModerationTest extends TestCase
             && $r->hasHeader('Authorization', 'Bearer aha-test')
             && $r['recipients'] === [['email' => 'arjan@example.com', 'name' => 'Arjan'], ['email' => 'mods@example.com']]
             && str_contains($r['html_content'], 'ik weet waar je woont'));
+
+        // The log says what was sent, to whom, and where that came from.
+        $sent = LogEntry::where('message', "Run #{$run->id}: email report sent to arjan@example.com, mods@example.com")->sole();
+        $this->assertSame(['arjan@example.com', 'mods@example.com'], $sent->context['recipients']);
+        $this->assertSame('.env', $sent->context['recipients_source']);
+        $this->assertSame('msg-1', $sent->context['message_id']);
+        $this->assertStringStartsWith('GeenStijl ', $sent->context['subject']);
+        $this->assertSame('111.222', LogEntry::where('message', 'like', "Run #{$run->id}: report posted to Slack %")->sole()->context['message_ts']);
+    }
+
+    public function test_the_log_shows_recipients_saved_in_settings_and_switched_off_channels(): void
+    {
+        Settings::save(['email_recipients' => 'other@example.com', 'slack_enabled' => false]);
+
+        $this->artisan('modbot:run')->assertSuccessful();
+
+        $run = ModerationRun::sole();
+        $sent = LogEntry::where('message', "Run #{$run->id}: email report sent to other@example.com")->sole();
+        $this->assertSame('Settings', $sent->context['recipients_source']);
+        $this->assertDatabaseHas('log_entries', ['message' => "Run #{$run->id}: Slack report not sent, Slack is switched off"]);
+        Http::assertNotSent(fn (Request $r) => str_contains($r->url(), 'slack.com'));
     }
 
     public function test_comments_are_only_analysed_once(): void
@@ -187,6 +211,32 @@ class RunModerationTest extends TestCase
 
         Http::assertSent(fn (Request $r) => str_contains($r->url(), 'slack.com') && $r['channel'] === '#moderatie');
         Http::assertNotSent(fn (Request $r) => str_contains($r->url(), 'ahasend'));
+    }
+
+    public function test_the_scheduler_queues_schedule_runs_for_the_worker(): void
+    {
+        config(['queue.default' => 'database']);
+        $schedule = Schedule::create([
+            'name' => 'Test', 'cron' => '0 * * * *', 'window_hours' => 3,
+            'send_slack' => true, 'send_email' => false, 'slack_channel' => '#moderatie',
+        ]);
+
+        $this->artisan("modbot:run --schedule={$schedule->id} --queue")->assertSuccessful();
+        // The worker has not picked it up yet: the next tick does not add another one.
+        $this->artisan("modbot:run --schedule={$schedule->id} --queue")->assertSuccessful();
+
+        $run = ModerationRun::sole();
+        $this->assertSame('queued', $run->status);
+        $this->assertSame('schedule', $run->trigger);
+        $this->assertSame(1, QueuedJob::count());
+        $this->assertDatabaseHas('log_entries', ['message' => "Schedule #{$schedule->id}: not queued again, run #{$run->id} is still waiting for the queue worker."]);
+        Http::assertNothingSent();
+
+        $this->artisan('queue:work --once --tries=1')->assertSuccessful();
+
+        $this->assertSame('succeeded', $run->fresh()->status);
+        $this->assertNotNull($schedule->fresh()->last_run_at);
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'slack.com') && $r['channel'] === '#moderatie');
     }
 
     public function test_a_queued_run_is_picked_up_by_the_job(): void

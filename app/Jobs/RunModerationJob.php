@@ -9,8 +9,8 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
 /**
- * Run started from the admin. Picked up by the queue worker that the
- * scheduler starts every minute.
+ * Run started from the admin or queued by a schedule. Picked up by the worker
+ * container (php artisan queue:work).
  */
 class RunModerationJob implements ShouldQueue
 {

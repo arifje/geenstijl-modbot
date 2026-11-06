@@ -1,11 +1,11 @@
 <?php
 
 use App\Models\Schedule as RunSchedule;
-use App\Services\QueueHealth;
 use Illuminate\Support\Facades\Schedule;
 
 // Report schedules are managed in the admin (/admin/schedules). The
-// scheduler re-reads them every minute.
+// scheduler re-reads them every minute and only queues the runs: the worker
+// container ("php artisan queue:work") runs them, one at a time.
 try {
     $schedules = RunSchedule::where('enabled', true)->get();
 } catch (Throwable) {
@@ -13,23 +13,15 @@ try {
 }
 
 foreach ($schedules as $schedule) {
-    Schedule::command('modbot:run', ['--schedule' => $schedule->id])
+    Schedule::command('modbot:run', ['--schedule' => $schedule->id, '--queue'])
         ->name("modbot:run schedule {$schedule->id} ({$schedule->name})")
         ->cron($schedule->cron)
-        ->timezone($schedule->timezone)
-        ->withoutOverlapping(60)
-        ->runInBackground();
+        ->timezone($schedule->timezone);
 }
 
-// Runs started from the admin. The check goes first: it releases a lock left
-// by a worker that is gone, so the worker below can start in the same minute.
+// Fails queued runs whose job is gone. Also keeps the scheduler's "last seen"
+// fresh: something is due every minute.
 Schedule::command('modbot:queue-check')->everyMinute();
-
-Schedule::command('queue:work --stop-when-empty --tries=1 --timeout=1500')
-    ->everyMinute()
-    ->withoutOverlapping(30)
-    ->createMutexNameUsing(QueueHealth::WORKER_MUTEX)
-    ->runInBackground();
 
 Schedule::command('modbot:prune')
     ->dailyAt('04:00')

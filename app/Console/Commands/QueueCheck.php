@@ -9,22 +9,16 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Runs every minute, just before the queue worker is started.
+ * Runs every minute in the scheduler.
  */
 #[Signature('modbot:queue-check')]
-#[Description('Release a stale queue worker lock and fail queued runs whose job is gone')]
+#[Description('Fail queued runs whose job is gone')]
 class QueueCheck extends Command
 {
     public function handle(QueueHealth $health): int
     {
-        $result = $health->check();
-
-        if ($result['released']) {
-            Log::warning('Released a stale queue worker lock: jobs were waiting but no worker was running.', ['category' => 'queue']);
-        }
-
-        if ($result['orphaned']) {
-            Log::warning("{$result['orphaned']} queued run(s) failed: their job was gone.", ['category' => 'queue']);
+        if ($orphaned = $health->failOrphanedRuns()) {
+            Log::warning("{$orphaned} queued run(s) failed: their job was gone.", ['category' => 'queue']);
         }
 
         return self::SUCCESS;
