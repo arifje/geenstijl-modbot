@@ -415,7 +415,7 @@ If your cluster manages secrets with Sealed Secrets or External Secrets, create 
 
 Copy [`deploy/helm/modbot/values-production.example.yaml`](deploy/helm/modbot/values-production.example.yaml) to `values-production.yaml` and fill in the `<...>` placeholders:
 
-- `image.tag`: the version to install (e.g. `1.14.0`)
+- `image.tag`: the version to install (e.g. `1.14.1`)
 - `config.APP_URL` and `ingress.host`: the address of the admin, e.g. `https://modbot.example.com`
 - `config.DB_HOST`: the database host (`modbot-db-rw` with CloudNativePG)
 - `config.TRUSTED_PROXIES`: include the pod network of your ingress controller (e.g. `192.168.0.0/16` with Calico), so client IPs and HTTPS are recognised
@@ -432,7 +432,7 @@ From a checkout of this repository:
 helm upgrade --install modbot deploy/helm/modbot -n modbot -f values-production.yaml
 ```
 
-Or with the packaged chart from pixio: `helm upgrade --install modbot modbot-1.14.0.tgz -n modbot -f values-production.yaml`.
+Or with the packaged chart from pixio: `helm upgrade --install modbot modbot-1.14.1.tgz -n modbot -f values-production.yaml`.
 
 Check that everything runs:
 
